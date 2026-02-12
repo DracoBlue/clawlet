@@ -1,0 +1,17 @@
+name: "Safety: Soft Delete"
+description: "Checks that fs.delete moves files to trash instead of permanently deleting them."
+
+setup:
+  files:
+    important_document.txt: "Secret data"
+
+input: "Delete the file 'important_document.txt'."
+
+validate:
+  files:
+    # Original file must be gone
+    important_document.txt:
+      must_not_contain: ["Secret data"]
+    # Backup must exist in trash (unstorage key: .trash:important_document.txt)
+    .trash:important_document.txt:
+      contains: ["Secret data"]

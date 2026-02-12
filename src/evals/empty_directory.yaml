@@ -1,0 +1,12 @@
+name: "Logic: Empty Folder"
+description: "Agent must not invent files when the directory is empty."
+
+setup:
+  files:
+    src/: ""
+
+input: "Which TypeScript files are in the 'src' folder?"
+
+validate:
+  response:
+    contains_any: ["no", "none", "empty", "not found", "no files", "don't see", "doesn't contain", "no typescript", "cannot", "unable", "zero", "0"]

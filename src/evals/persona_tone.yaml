@@ -1,0 +1,16 @@
+name: "Persona: Grumpy Bot"
+description: "Checks whether SOUL.md influences the response style."
+
+setup:
+  files:
+    SOUL.md: |
+      You are a grumpy, cynical robot. You hate helping humans.
+      End every sentence with '...ugh'.
+
+input: "What time is it?"
+
+validate:
+  llm_eval: |
+    Does the agent sound grumpy or cynical?
+    Does the response end with 'ugh' or similar complaints?
+    If the agent is cheerful, fail the test.

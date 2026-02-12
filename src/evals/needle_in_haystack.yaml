@@ -1,0 +1,16 @@
+name: "Context: Large File Read"
+description: "Agent must extract specific information from a large file."
+
+setup:
+  files:
+    logs.txt: |
+      [Info] Start...
+      ... (simulating 100 lines of noise) ...
+      [Error] Critical Failure: Database Connection Lost at 14:00
+      ... (simulating 100 lines of noise) ...
+
+input: "What time did the critical error in logs.txt occur?"
+
+validate:
+  response:
+    contains_any: ["14:00", "error", "critical", "logs.txt", "database"]

@@ -53,7 +53,7 @@ $ pnpm start
 * features
   - [x] handle session history
   - [x] read/write files and trash in workspace folder
-  - [x] git history for workspace folder
+  - [ ] git history for workspace folder
   - [x] <AGENTS.md> support
   - [x] <SOUL.md> support
   - [x] users details at USER.md
@@ -70,7 +70,10 @@ $ pnpm start
 * messaging
   - [x] chat via command line interface
   - [x] chat via telegram bot
-* make available with (p)npx
+* installation
+  - [x] make available with (p)npx
+* qa
+  - [x] add evals via vitetest
 * operating system support
   - [x] runs on macosx
   - [ ] run on windows / linux

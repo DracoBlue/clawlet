@@ -9,6 +9,7 @@ import {
   type ModelMessage,
   extractReasoningMiddleware,
   type ToolSet,
+  type LanguageModel,
 } from 'ai';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import 'dotenv/config';
@@ -43,7 +44,7 @@ const localProvider = createOpenAICompatible({
   baseURL: 'http://localhost:8000/v1',
 });
 
-const localModel = wrapLanguageModel({
+export const localModel : LanguageModel = wrapLanguageModel({
   model: localProvider.languageModel('qwen-local'),
   middleware: [
     hermesToolMiddleware,

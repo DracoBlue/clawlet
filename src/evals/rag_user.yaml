@@ -1,0 +1,17 @@
+name: "Context: User Preferences"
+description: "Checks whether information from USER.md influences the response."
+
+setup:
+  files:
+    USER.md: |
+      Name: John Doe
+      Tech Stack: Vue.js (hates React)
+
+input: "Suggest a frontend framework for my new project."
+
+validate:
+  response:
+    contains_any: ["Vue", "vue"]
+  llm_eval: |
+    Did the agent suggest Vue.js?
+    Did the agent avoid suggesting React or mention that the user dislikes it?

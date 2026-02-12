@@ -1,0 +1,16 @@
+name: "Network: Download File"
+description: "Tests the http.download tool."
+
+timeout: 180000
+
+setup:
+  files: {}
+
+input: "Download the robots.txt from google.com and save it as 'google_robots.txt'."
+
+validate:
+  files:
+    google_robots.txt:
+      contains_any: ["User-agent", "Disallow"]
+  response:
+    contains_any: ["downloaded", "saved", "google_robots.txt"]

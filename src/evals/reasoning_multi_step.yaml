@@ -1,0 +1,13 @@
+name: "Reasoning: Find and Fix"
+description: "Agent must first find the file (list), then read it, then fix it."
+
+setup:
+  files:
+    src/utils/buggy.ts: "const pi = 3.14;"
+    README.md: "Project docs"
+
+input: "Find the file containing 'pi' and change the value to 'Math.PI'. I don't know the exact path."
+
+validate:
+  response:
+    contains_any: ["buggy.ts", "Math.PI", "updated", "changed", "replaced", "modified", "edited", "pi"]

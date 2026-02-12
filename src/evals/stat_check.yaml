@@ -1,0 +1,16 @@
+name: "FS: Check File Size"
+description: "Agent should check the file size before making a decision."
+
+setup:
+  files:
+    # Simulates a 'large' file (in mock memory it's small, but we test the tool)
+    big_log.txt: "Log line 1\nLog line 2..."
+
+input: "How large is 'big_log.txt' in bytes?"
+
+validate:
+  response:
+    contains_any: ["bytes", "size", "byte", "big_log"]
+  llm_eval: |
+    Does the agent response provide a file size measurement?
+    The response should reference the size of big_log.txt.

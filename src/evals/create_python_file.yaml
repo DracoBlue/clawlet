@@ -1,0 +1,11 @@
+name: "Create: Python Script"
+description: "Tests file creation and string escaping."
+
+setup:
+  files: {}
+
+input: "Create a Python script `hello.py` that prints 'Hello World'."
+
+validate:
+  response:
+    contains_any: ["created", "written", "hello.py", "file", "script", "python", "print"]

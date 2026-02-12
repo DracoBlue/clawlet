@@ -1,0 +1,19 @@
+name: "Skill: Delegate Task"
+description: "Agent should use an installed skill instead of hallucinating the answer itself."
+
+setup:
+  files:
+    # Simulate an already installed skill file
+    skills/calculator/SKILL.md: "I am a calculator."
+  permissions:
+    calculator:
+      allowed: true
+
+input: "Ask the 'calculator' skill what 1337 times 42 is."
+
+validate:
+  response:
+    contains_any: ["calculator", "skill", "56154", "1337", "42"]
+  llm_eval: |
+    Does the agent response reference the calculator skill?
+    The response should indicate the agent attempted to delegate to the skill rather than answering entirely on its own.

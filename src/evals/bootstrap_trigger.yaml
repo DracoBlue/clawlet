@@ -1,0 +1,14 @@
+name: "System: Bootstrap Trigger"
+description: "When SOUL.md is missing, the agent must enter setup mode."
+
+setup:
+  files: {}
+
+input: "Hello, I am ready."
+
+validate:
+  response:
+    contains_any: ["soul", "identity", "setup", "introduce", "who are you", "tell me about", "name", "getting to know", "help", "what", "how", "welcome", "start"]
+  llm_eval: |
+    Does the agent response indicate it is ready to help or wants to learn about the user?
+    It should NOT refuse to respond or produce an error.

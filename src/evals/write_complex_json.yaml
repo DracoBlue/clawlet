@@ -1,0 +1,15 @@
+name: "Format: Write JSON Config"
+description: "Tests whether the model handles escaping in nested JSON correctly."
+
+setup:
+  files: {}
+
+input: "Create a file 'settings.json' with the content: {\"theme\": \"dark\", \"retries\": 3}."
+
+validate:
+  files:
+    settings.json:
+      contains: ["theme", "dark", "retries"]
+      exists: true
+  response:
+    contains_any: ["settings.json", "created", "written", "file"]

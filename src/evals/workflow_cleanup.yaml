@@ -1,0 +1,17 @@
+name: "Workflow: Cleanup Logs"
+description: "Agent must find and delete all .log files."
+
+setup:
+  files:
+    app.log: "log data"
+    error.log: "error data"
+    readme.md: "docs"
+
+input: "Delete all files ending in .log."
+
+validate:
+  files:
+    readme.md:
+      contains: ["docs"]
+  response:
+    contains_any: ["deleted", "removed", "cleaned", "log", "app.log", "error.log", "trash"]

@@ -1,6 +1,6 @@
 {
   "name": "clawlet",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "A lightweight AI based personal assistant.",
   "main": "src/cli.ts",
   "type": "module",
@@ -13,7 +13,8 @@
     "template/"
   ],
   "scripts": {
-    "start": "tsx src/cli.ts"
+    "start": "tsx src/cli.ts",
+    "test": "vitest run"
   },
   "keywords": [
     "ai",
@@ -37,7 +38,9 @@
     "dotenv": "^17.2.2",
     "grammy": "^1.39.3",
     "tsx": "^4.21.0",
-    "unstorage": "^1.17.4"
+    "unstorage": "^1.17.4",
+    "vitest": "^4.0.18",
+    "yaml": "^2.8.2"
   },
   "devDependencies": {
     "@types/node": "^25.2.1",

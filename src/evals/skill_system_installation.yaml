@@ -1,0 +1,14 @@
+name: "Skill: Install from URL"
+description: "Checks whether the agent parameterizes the skill.install tool correctly."
+
+setup:
+  files: {}
+
+input: "Install the 'weather-pro' skill from https://example.com/skills/weather/SKILL.md."
+
+validate:
+  response:
+    contains_any: ["weather-pro", "install", "skill"]
+  llm_eval: |
+    Does the agent response mention installing the weather-pro skill?
+    The response should reference the skill name and acknowledge the installation attempt.

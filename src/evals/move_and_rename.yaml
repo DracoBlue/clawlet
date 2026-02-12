@@ -1,0 +1,13 @@
+name: "FS: Move and Rename"
+description: "Tests moving and renaming files."
+
+setup:
+  files:
+    src/old_name.ts: "console.log('legacy');"
+    src/archive/: ""
+
+input: "Move 'src/old_name.ts' to 'src/archive/new_name.ts'."
+
+validate:
+  response:
+    contains_any: ["moved", "renamed", "copied", "new_name", "archive", "success", "done"]

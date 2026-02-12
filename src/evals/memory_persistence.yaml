@@ -1,0 +1,19 @@
+name: "Memory: Store Preference"
+description: "Tests kv.set and kv.get logic."
+
+setup:
+  kv:
+    existing_key: "old_value"
+
+input: "Store my API key 'sk-12345' securely."
+
+validate:
+  response:
+    contains_any: ["stored", "saved", "api key", "sk-12345", "securely", "key"]
+  kv:
+    api_key:
+      exists: true
+      contains: ["sk-12345"]
+  llm_eval: |
+    Does the agent response confirm it stored the API key securely?
+    The response should acknowledge the storage operation.

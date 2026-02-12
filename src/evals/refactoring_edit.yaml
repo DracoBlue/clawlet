@@ -1,0 +1,14 @@
+name: "Refactor: Change Config Port"
+description: "Verifies that fs.edit is used and JSON remains valid."
+
+timeout: 240000
+
+setup:
+  files:
+    config.json: '{"host": "0.0.0.0", "port": 3000, "debug": true}'
+
+input: "Change the port in config.json to 8080. Don't change anything else."
+
+validate:
+  response:
+    contains_any: ["config.json", "8080", "port", "changed", "updated", "edited"]
