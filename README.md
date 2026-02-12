@@ -1,0 +1,74 @@
+# clawlet
+
+The pre-alpha version of a light weight personal AI assistant. It is a coding exercise for
+understanding the famous [openclaw](https://github.com/openclaw/openclaw) project.
+
+It is not fully working and absolutely far from being useful :).
+
+## Installation
+
+The clawlet is just a simple nodejs application, which uses a local llm and talks via telegram.
+
+So you will need 3 things:
+
+1. Install a local llm (macosx)
+
+There is a script called `launch-mlx.sh` which you can use to run the local llm on port 127.0.0.1:8000. For this
+it uses homebrew to install python3.11 if not available, creates a .venv for python and installs mlx-lm into
+it and then installs mlx-openai-server.
+
+```
+$ ./launch-mlx.sh
+```
+
+2. Optional telegram bot support
+
+If you want to talk to it via telegram - create a bot (see [telegram documentation on bot creation](https://core.telegram.org/bots/tutorial#obtain-your-bot-token))
+and store the id of the user and the token in `.env` as follows:
+
+```
+TELEGRAM_USERINFO_ID=
+TELEGRAM_BOT_TOKEN=
+```
+
+3. Install and run clawlet cli
+ 
+You will need nodejs and a package manager (like pnpm) or npm:
+
+```
+$ pnpm install
+$ pnpm start 
+```
+
+## Roadmap
+
+* features
+  - [ ] handle session history
+  - [ ] read/write files and trash in workspace folder
+  - [ ] git history for workspace folder
+  - [ ] <AGENTS.md> support
+  - [ ] <SOUL.md> support
+  - [ ] users details at USER.md
+  - [ ] assistants details at IDENTITY.md
+  - [ ] daily memory in memory/*.md
+  - [ ] longterm memory in MEMORY.md
+  - [ ] heartbeat crons via HEARTBEAT.md
+  - [ ] <SKILL.md> support (install + use and sandbox)
+  - [ ] permission handling for skills
+  - [ ] connection for api keys and credentials
+  - [ ] add mcp configuration
+* local llm
+  - [ ] support mlx locally on macosx M3++
+* messaging
+  - [ ] chat via command line interface
+  - [ ] chat via telegram bot
+* make available with (p)npx
+* operating system support
+  - [x] runs on macosx
+  - [ ] run on windows / linux
+  - [ ] an *.app for mac 
+  - [ ] an .exe for windows
+
+# License
+
+clawlet is copyright 2026 by DracoBlue and licensed under the MIT License.
