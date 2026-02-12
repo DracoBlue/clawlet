@@ -63,6 +63,7 @@ $ pnpm start
   - [ ] heartbeat crons via HEARTBEAT.md
   - [x] <SKILL.md> support (install + use and sandbox)
   - [x] permission handling for skills
+  - [ ] add interactive interface to activate permissions
   - [x] connection for api keys and credentials
   - [ ] add mcp configuration
 * local llm
