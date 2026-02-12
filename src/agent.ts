@@ -18,6 +18,7 @@ import { AgentMemory } from './memory.js';
 import { readFile, writeFile, copyFile, access, mkdir } from 'node:fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'node:url';
+import TurndownService from 'turndown';
 
 // Resolve the package root directory (where template/ lives), independent of cwd
 const __filename = fileURLToPath(import.meta.url);
@@ -56,6 +57,8 @@ export const localModel : LanguageModel = wrapLanguageModel({
     })
   ]
 });
+
+const turndownService = new TurndownService()
 
 // --- HELPERS ---
 
@@ -231,10 +234,11 @@ function createTools(memory: AgentMemory) {
           url: { type: 'string', description: 'URL to request' },
           headers: { type: 'object', additionalProperties: { type: 'string' }, description: 'Optional headers' },
           body: { type: 'string', description: 'Optional unescaped body string' },
+          transformer: { type: 'string', enum: ['markdown'], description: 'Transform the result into e.g. markdown' }
         },
         required: ['url'],
       }),
-      execute: async ({ method, url, headers, body }: { method?: string, url: string, headers?: Record<string, string>, body?: string }) => {
+      execute: async ({ method, url, headers, body, transformer }: { method?: string, url: string, headers?: Record<string, string>, body?: string, transformer?: string  }) => {
         const executeMethod = method ? method : 'GET';
         console.log(`  🌐 [HTTP] ${executeMethod} ${url}`);
         try {
@@ -250,10 +254,11 @@ function createTools(memory: AgentMemory) {
           });
 
           const text = await res.text();
+          const transformedText = transformer === 'markdown' ? turndownService.turndown(text) : text;
           return JSON.stringify({
             status: res.status,
             statusText: res.statusText,
-            data: text.length > 2000 ? text.substring(0, 2000) + "..." : text
+            data: transformedText.length > 5000 ? transformedText.substring(0, 5000) + "..." : transformedText
           });
         } catch (e: any) { return JSON.stringify({ error: e.message }); }
       },
@@ -266,20 +271,22 @@ function createTools(memory: AgentMemory) {
         properties: {
           url: { type: 'string', description: 'URL to request' },
           headers: { type: 'object', additionalProperties: { type: 'string' }, description: 'Optional headers' },
+          transformer: { type: 'string', enum: ['markdown'], description: 'Transform the result into e.g. markdown' }
         },
         required: ['url'],
       }),
-      execute: async ({ url, headers }: { url: string, headers?: Record<string, string> }) => {
+      execute: async ({ url, headers, transformer }: { url: string, headers?: Record<string, string>, transformer?: string  }) => {
         console.log(`  🌐 [HTTP] GET ${url}`);
         try {
           const res = await fetch(url, {
             headers: { 'Content-Type': 'application/json', ...headers },
           });
           const text = await res.text();
+          const transformedText = transformer === 'markdown' ? turndownService.turndown(text) : text;
           return JSON.stringify({
             status: res.status,
             statusText: res.statusText,
-            data: text.length > 2000 ? text.substring(0, 2000) + "..." : text
+            data: transformedText.length > 5000 ? transformedText.substring(0, 5000) + "..." : transformedText
           });
         } catch (e: any) { return JSON.stringify({ error: e.message }); }
       },
@@ -293,10 +300,11 @@ function createTools(memory: AgentMemory) {
           url: { type: 'string', description: 'URL to request' },
           body: { type: 'string', description: 'Optional unescaped body string' },
           headers: { type: 'object', additionalProperties: { type: 'string' }, description: 'Optional headers' },
+          transformer: { type: 'string', enum: ['markdown'], description: 'Transform the result into e.g. markdown' }
         },
         required: ['url'],
       }),
-      execute: async ({ url, body, headers }: { url: string, body?: string, headers?: Record<string, string> }) => {
+      execute: async ({ url, body, headers, transformer }: { url: string, body?: string, headers?: Record<string, string>, transformer?: string }) => {
         console.log(`  🌐 [HTTP] POST ${url}`);
         try {
           let parsedBody = body;
@@ -309,11 +317,11 @@ function createTools(memory: AgentMemory) {
             body: parsedBody ? JSON.stringify(parsedBody) : null
           });
           const text = await res.text();
-        console.log(`    -> ${res.status}`);
+          const transformedText = transformer === 'markdown' ? turndownService.turndown(text) : text;
           return JSON.stringify({
             status: res.status,
             statusText: res.statusText,
-            data: text.length > 2000 ? text.substring(0, 2000) + "..." : text
+            data: transformedText.length > 5000 ? transformedText.substring(0, 5000) + "..." : transformedText
           });
         } catch (e: any) { return JSON.stringify({ error: e.message }); }
       },
