@@ -43,25 +43,25 @@ $ pnpm start
 ## Roadmap
 
 * features
-  - [ ] handle session history
-  - [ ] read/write files and trash in workspace folder
-  - [ ] git history for workspace folder
-  - [ ] <AGENTS.md> support
-  - [ ] <SOUL.md> support
-  - [ ] users details at USER.md
-  - [ ] assistants details at IDENTITY.md
-  - [ ] daily memory in memory/*.md
-  - [ ] longterm memory in MEMORY.md
+  - [x] handle session history
+  - [x] read/write files and trash in workspace folder
+  - [x] git history for workspace folder
+  - [x] <AGENTS.md> support
+  - [x] <SOUL.md> support
+  - [x] users details at USER.md
+  - [x] assistants details at IDENTITY.md
+  - [x] daily memory in memory/*.md
+  - [x] longterm memory in MEMORY.md
   - [ ] heartbeat crons via HEARTBEAT.md
-  - [ ] <SKILL.md> support (install + use and sandbox)
-  - [ ] permission handling for skills
-  - [ ] connection for api keys and credentials
+  - [x] <SKILL.md> support (install + use and sandbox)
+  - [x] permission handling for skills
+  - [x] connection for api keys and credentials
   - [ ] add mcp configuration
 * local llm
-  - [ ] support mlx locally on macosx M3++
+  - [x] support mlx locally on macosx M3++
 * messaging
-  - [ ] chat via command line interface
-  - [ ] chat via telegram bot
+  - [x] chat via command line interface
+  - [x] chat via telegram bot
 * make available with (p)npx
 * operating system support
   - [x] runs on macosx
