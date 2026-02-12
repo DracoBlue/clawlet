@@ -32,8 +32,16 @@ TELEGRAM_BOT_TOKEN=
 ```
 
 3. Install and run clawlet cli
- 
-You will need nodejs and a package manager (like pnpm) or npm:
+
+If you want to use the published release use:
+
+```
+$ npx clawlet
+```
+
+## Development Version
+
+If you cloned this repository run:
 
 ```
 $ pnpm install

@@ -14,8 +14,14 @@ import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import 'dotenv/config';
 import { hermesToolMiddleware } from '@ai-sdk-tool/parser';
 import { AgentMemory } from './memory.js';
-import { readFile, writeFile, copyFile, access } from 'node:fs/promises';
+import { readFile, writeFile, copyFile, access, mkdir } from 'node:fs/promises';
 import path from 'path';
+import { fileURLToPath } from 'node:url';
+
+// Resolve the package root directory (where template/ lives), independent of cwd
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const PACKAGE_ROOT = path.resolve(__dirname, '..');
 
 // --- ADAPTER INTERFACES ---
 
@@ -1121,15 +1127,18 @@ export class Agent {
     this.initialized = true;
 
     // Bootstrap: copy AGENTS.template -> workspace/AGENTS.md if missing
+    // Templates are resolved from the package install directory (PACKAGE_ROOT),
+    // NOT from process.cwd(), so this works correctly via npx/global install.
     const workspaceDir = path.join(process.cwd(), 'workspace');
     const agentsMdPath = path.join(workspaceDir, 'AGENTS.md');
-    const templatePath = path.join(process.cwd(), 'template', 'AGENTS.template');
+    const templatePath = path.join(PACKAGE_ROOT, 'template', 'AGENTS.template');
 
     try {
       await access(agentsMdPath);
     } catch {
       // AGENTS.md does not exist, copy from template
       try {
+        await mkdir(workspaceDir, { recursive: true });
         await copyFile(templatePath, agentsMdPath);
         console.log(`  📋 Copied AGENTS.template -> workspace/AGENTS.md`);
       } catch (e: any) {
@@ -1151,7 +1160,7 @@ export class Agent {
 
     if (needsBootstrap) {
       try {
-        const bootstrapPath = path.join(process.cwd(), 'template', 'BOOTSTRAP.md');
+        const bootstrapPath = path.join(PACKAGE_ROOT, 'template', 'BOOTSTRAP.md');
         this.bootstrapPrompt = await readFile(bootstrapPath, 'utf-8');
         console.log(`  🚀 Bootstrap mode: SOUL.md, IDENTITY.md, or USER.md missing. Running BOOTSTRAP.md first.`);
       } catch (e: any) {
