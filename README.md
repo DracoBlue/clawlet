@@ -80,6 +80,14 @@ $ pnpm start
   - [ ] an *.app for mac 
   - [ ] an .exe for windows
 
+# Similiar projects
+
+* Typescript
+  * <https://github.com/openclaw/openclaw>
+* GO
+  * <https://github.com/sipeed/picoclaw>
+  * <https://github.com/HKUDS/nanobot>
+
 # License
 
 clawlet is copyright 2026 by DracoBlue and licensed under the MIT License.
