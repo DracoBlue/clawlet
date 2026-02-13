@@ -19,6 +19,7 @@ import { readFile, writeFile, copyFile, access, mkdir } from 'node:fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'node:url';
 import TurndownService from 'turndown';
+import { logger } from './logger.js';
 
 // Resolve the package root directory (where template/ lives), independent of cwd
 const __filename = fileURLToPath(import.meta.url);
@@ -185,7 +186,7 @@ function createSandboxedTools(
       execute: async (args: any) => {
         for (const key in args) {
           if (!rules.some(r => matchesPermissionPattern(args[key], r[key] || '*'))) {
-            console.log(` 🚫 Permission denied: ${key} not allowed for this skill with value ${args[key]}. ${JSON.stringify(args)} for permission: ${JSON.stringify(rules)}`);
+            logger.warn({ key, value: args[key], args, rules }, 'Skill permission denied');
 
             return JSON.stringify({ error: `Permission denied: ${key} not allowed for this skill with value ${args[key]}.` });
           }
@@ -225,7 +226,7 @@ function createTools(memory: AgentMemory, model: LanguageModel) {
       }),
       execute: async ({ method, url, headers, body, transformer }: { method?: string, url: string, headers?: Record<string, string>, body?: string, transformer?: string  }) => {
         const executeMethod = method ? method : 'GET';
-        console.log(`  🌐 [HTTP] ${executeMethod} ${url}`);
+        logger.debug({ method: executeMethod, url }, 'HTTP request');
         try {
           let parsedBody = body;
           if (typeof body === 'string') {
@@ -261,7 +262,7 @@ function createTools(memory: AgentMemory, model: LanguageModel) {
         required: ['url'],
       }),
       execute: async ({ url, headers, transformer }: { url: string, headers?: Record<string, string>, transformer?: string  }) => {
-        console.log(`  🌐 [HTTP] GET ${url}`);
+        logger.debug({ url }, 'HTTP GET');
         try {
           const res = await fetch(url, {
             headers: { 'Content-Type': 'application/json', ...headers },
@@ -290,7 +291,7 @@ function createTools(memory: AgentMemory, model: LanguageModel) {
         required: ['url'],
       }),
       execute: async ({ url, body, headers, transformer }: { url: string, body?: string, headers?: Record<string, string>, transformer?: string }) => {
-        console.log(`  🌐 [HTTP] POST ${url}`);
+        logger.debug({ url }, 'HTTP POST');
         try {
           let parsedBody = body;
           if (typeof body === 'string') {
@@ -324,7 +325,7 @@ function createTools(memory: AgentMemory, model: LanguageModel) {
       }),
       execute: async ({ url, filename }: { url: string, filename?: string }) => {
         const name = filename || url.split('/').pop() || 'download';
-        console.log(`  ⬇️ [HTTP] download ${url} -> ${name}`);
+        logger.debug({ url, filename: name }, 'HTTP download');
         try {
           const res = await fetch(url);
           if (!res.ok) return JSON.stringify({ error: `HTTP ${res.status} ${res.statusText}` });
@@ -361,7 +362,7 @@ function createTools(memory: AgentMemory, model: LanguageModel) {
         required: ['key', 'value'],
       }),
       execute: async ({ key, value }: { key: string, value: string }) => {
-        console.log(`  🔑 [KV] set ${key}`);
+        logger.debug({ key }, 'KV set');
         try {
           await memory.secrets.set(key, value);
           return `Success: Saved ${key}.`;
@@ -379,7 +380,7 @@ function createTools(memory: AgentMemory, model: LanguageModel) {
         required: ['key'],
       }),
       execute: async ({ key }: { key: string }) => {
-        console.log(`  🔑 [KV] get ${key}`);
+        logger.debug({ key }, 'KV get');
         try {
           const result = await memory.secrets.get(key);
           return result ?? "NOT_FOUND";
@@ -390,7 +391,7 @@ function createTools(memory: AgentMemory, model: LanguageModel) {
     'kv.list': tool({
       description: 'List all keys in the key-value store.',
       execute: async () => {
-        console.log(`  🔑 [KV] list`);
+        logger.debug('KV list');
         try {
           const keys = await memory.secrets.listKeys();
           return keys.join(', ') || "EMPTY_STORE";
@@ -408,7 +409,7 @@ function createTools(memory: AgentMemory, model: LanguageModel) {
         required: ['key'],
       }),
       execute: async ({ key }: { key: string }) => {
-        console.log(`  🔑 [KV] delete ${key}`);
+        logger.debug({ key }, 'KV delete');
         try {
           await memory.secrets.delete(key);
           return `Success: Deleted ${key}.`;
@@ -426,7 +427,7 @@ function createTools(memory: AgentMemory, model: LanguageModel) {
         required: ['key'],
       }),
       execute: async ({ key }: { key: string }) => {
-        console.log(`  🔑 [KV] has ${key}`);
+        logger.debug({ key }, 'KV has');
         try {
           const exists = await memory.secrets.has(key);
           return exists ? "true" : "false";
@@ -437,7 +438,7 @@ function createTools(memory: AgentMemory, model: LanguageModel) {
     'fs.listDir': tool({
       description: 'List all files in the workspace (including memory logs and skills).',
       execute: async () => {
-        console.log(`  📂 [FS] listDir`);
+        logger.debug('FS listDir');
         try {
           const keys = await memory.workspace.getKeys();
           return keys.join('\n') || "No files found.";
@@ -455,7 +456,7 @@ function createTools(memory: AgentMemory, model: LanguageModel) {
         required: ['path'],
       }),
       execute: async ({ path }: { path: string }) => {
-        console.log(`  📖 [FS] readFile ${path}`);
+        logger.debug({ path }, 'FS readFile');
         try {
           const content = await memory.workspace.getItem(path);
           if (content === null || content === undefined) return "File not found. Create it first with fs.writeFile if needed.";
@@ -475,7 +476,7 @@ function createTools(memory: AgentMemory, model: LanguageModel) {
         required: ['path', 'content'],
       }),
       execute: async ({ path, content }: { path: string, content: string }) => {
-        console.log(`  ✍️ [FS] writeFile ${path}`);
+        logger.debug({ path }, 'FS writeFile');
         try {
           await memory.workspace.setItem(path, content);
           return `Success: Wrote to ${path}`;
@@ -495,7 +496,7 @@ function createTools(memory: AgentMemory, model: LanguageModel) {
         required: ['path', 'find', 'replace'],
       }),
       execute: async ({ path, find, replace }: { path: string, find: string, replace: string }) => {
-        console.log(`  ✏️ [FS] edit ${path}`);
+        logger.debug({ path }, 'FS edit');
         try {
           const content = await memory.workspace.getItem(path);
           if (content === null || content === undefined) return `Error: File "${path}" not found.`;
@@ -533,13 +534,13 @@ function createTools(memory: AgentMemory, model: LanguageModel) {
 
           if (path.startsWith('.trash:') || path.startsWith('.trash/')) {
             // Already in trash — hard delete
-            console.log(`  🗑️ [FS] permanentDelete ${path}`);
+            logger.debug({ path }, 'FS permanentDelete');
             await memory.workspace.removeItem(path);
             return `Success: Permanently deleted ${path}`;
           } else {
             // Move to .trash/
             const trashPath = `.trash:${path}`;
-            console.log(`  🗑️ [FS] softDelete ${path} -> ${trashPath}`);
+            logger.debug({ path, trashPath }, 'FS softDelete');
             await memory.workspace.setItem(trashPath, content);
             await memory.workspace.removeItem(path);
             return `Success: Moved ${path} to ${trashPath}`;
@@ -559,7 +560,7 @@ function createTools(memory: AgentMemory, model: LanguageModel) {
         required: ['from', 'to'],
       }),
       execute: async ({ from, to }: { from: string, to: string }) => {
-        console.log(`  📦 [FS] move ${from} -> ${to}`);
+        logger.debug({ from, to }, 'FS move');
         try {
           const content = await memory.workspace.getItem(from);
           if (content === null || content === undefined) return `File not found: ${from}`;
@@ -580,7 +581,7 @@ function createTools(memory: AgentMemory, model: LanguageModel) {
         required: ['path'],
       }),
       execute: async ({ path }: { path: string }) => {
-        console.log(`  🔍 [FS] exists ${path}`);
+        logger.debug({ path }, 'FS exists');
         try {
           const exists = await memory.workspace.hasItem(path);
           return exists ? "true" : "false";
@@ -598,7 +599,7 @@ function createTools(memory: AgentMemory, model: LanguageModel) {
         required: ['path'],
       }),
       execute: async ({ path }: { path: string }) => {
-        console.log(`  📊 [FS] stat ${path}`);
+        logger.debug({ path }, 'FS stat');
         try {
           const exists = await memory.workspace.hasItem(path);
           if (!exists) return "File not found.";
@@ -619,7 +620,7 @@ function createTools(memory: AgentMemory, model: LanguageModel) {
         required: ['name', 'url'],
       }),
       execute: async ({ name, url }: { name: string; url: string }) => {
-        console.log(`  📦 [SKILL] Installing skill "${name}" from ${url}`);
+        logger.info({ skill: name, url }, 'SKILL installing');
 
         // Phase 0: Validate name
         if (!/^[a-zA-Z0-9_-]+$/.test(name)) {
@@ -629,7 +630,7 @@ function createTools(memory: AgentMemory, model: LanguageModel) {
         const skillBasePath = `skills:${name}`;
 
         // Phase 1: Download SKILL.md
-        console.log(`  📦 [SKILL] Step 1/4: Downloading SKILL.md...`);
+        logger.debug('SKILL step 1/4: downloading SKILL.md');
         let skillMdContent: string;
         try {
           const res = await fetch(url);
@@ -641,10 +642,10 @@ function createTools(memory: AgentMemory, model: LanguageModel) {
           return JSON.stringify({ error: `Network error downloading SKILL.md: ${e.message}` });
         }
         await memory.workspace.setItem(`${skillBasePath}:SKILL.md`, skillMdContent);
-        console.log(`  📦 [SKILL] Saved SKILL.md (${skillMdContent.length} bytes)`);
+        logger.debug({ bytes: skillMdContent.length }, 'SKILL saved SKILL.md');
 
         // Phase 2: Extract additional files via LLM
-        console.log(`  📦 [SKILL] Step 2/4: Analyzing for additional files...`);
+        logger.debug('SKILL step 2/4: analyzing for additional files');
         let additionalFiles: Array<{ url: string; filename: string }> = [];
         try {
           const { text: installJson } = await generateText({
@@ -667,11 +668,11 @@ Do NOT include SKILL.md itself. If no additional files, return [].`,
           const match = installJson.match(/\[[\s\S]*\]/);
           if (match) additionalFiles = JSON.parse(match[0]);
         } catch (e: any) {
-          console.log(`  ⚠️ [SKILL] Could not parse additional files: ${e.message}`);
+          logger.warn({ err: e }, 'SKILL could not parse additional files');
         }
 
         // Phase 3: Download additional files
-        console.log(`  📦 [SKILL] Step 3/4: Downloading ${additionalFiles.length} additional files...`);
+        logger.debug({ count: additionalFiles.length }, 'SKILL step 3/4: downloading additional files');
         const downloadResults: Array<{ filename: string; status: string }> = [];
         for (const file of additionalFiles) {
           try {
@@ -683,14 +684,14 @@ Do NOT include SKILL.md itself. If no additional files, return [].`,
             const content = await res.text();
             await memory.workspace.setItem(`${skillBasePath}:${file.filename}`, content);
             downloadResults.push({ filename: file.filename, status: 'ok' });
-            console.log(`  📦 [SKILL] Downloaded ${file.filename}`);
+            logger.debug({ filename: file.filename }, 'SKILL downloaded file');
           } catch (e: any) {
             downloadResults.push({ filename: file.filename, status: `failed: ${e.message}` });
           }
         }
 
         // Phase 4: Analyze permissions via LLM
-        console.log(`  📦 [SKILL] Step 4/4: Analyzing required permissions...`);
+        logger.debug('SKILL step 4/4: analyzing required permissions');
         let skillPermissions: Record<string, Array<Record<string, string>>> = {};
         try {
           const { text: permJson } = await generateText({
@@ -719,7 +720,7 @@ Return ONLY a JSON object mapping tool names to arrays of permission rules. Exam
           const match = permJson.match(/\{[\s\S]*\}/);
           if (match) skillPermissions = JSON.parse(match[0]);
         } catch (e: any) {
-          console.log(`  ⚠️ [SKILL] Could not analyze permissions: ${e.message}`);
+          logger.warn({ err: e }, 'SKILL could not analyze permissions');
         }
 
         // Phase 5: Write permissions.json at project root
@@ -738,9 +739,9 @@ Return ONLY a JSON object mapping tool names to arrays of permission rules. Exam
         permissionsFile.skills[name] = skillPermissions;
         try {
           await writeFile(permissionsPath, JSON.stringify(permissionsFile, null, 2), 'utf-8');
-          console.log(`  📦 [SKILL] Updated permissions.json`);
+          logger.info('SKILL updated permissions.json');
         } catch (e: any) {
-          console.log(`  ⚠️ [SKILL] Could not write permissions.json: ${e.message}`);
+          logger.warn({ err: e }, 'SKILL could not write permissions.json');
         }
 
         return JSON.stringify({
@@ -759,7 +760,7 @@ Return ONLY a JSON object mapping tool names to arrays of permission rules. Exam
     'connection.list': tool({
       description: 'List all available connections (configured API credentials). Returns comma-separated connection names.',
       execute: async () => {
-        console.log(`  🔌 [CONN] list`);
+        logger.debug('CONN list');
         try {
           const settings = await readSettings();
           const names = Object.keys(settings.connections);
@@ -782,7 +783,7 @@ Return ONLY a JSON object mapping tool names to arrays of permission rules. Exam
         required: ['name', 'url'],
       }),
       execute: async ({ name, url, method, headers, body }: { name: string; url: string; method?: string; headers?: Record<string, string>; body?: string }) => {
-        console.log(`  🔌 [CONN] request "${name}" ${method || 'GET'} ${url}`);
+        logger.debug({ name, method: method || 'GET', url }, 'CONN request');
         const settings = await readSettings();
         const conn = settings.connections[name];
 
@@ -810,7 +811,7 @@ Return ONLY a JSON object mapping tool names to arrays of permission rules. Exam
           });
 
           const text = await res.text();
-          console.log(`    -> ${res.status}`);
+          logger.debug({ status: res.status }, 'CONN request response');
           return JSON.stringify({
             status: res.status,
             statusText: res.statusText,
@@ -841,7 +842,7 @@ Return ONLY a JSON object mapping tool names to arrays of permission rules. Exam
         name: string; url: string; method?: string; headers?: Record<string, string>; body?: string;
         type: string; tokenPath?: string; refreshTokenPath?: string; refreshUrl?: string;
       }) => {
-        console.log(`  🔌 [CONN] create "${name}" via ${method || 'POST'} ${url}`);
+        logger.debug({ name, method: method || 'POST', url }, 'CONN create');
 
         if (!/^[a-zA-Z0-9_-]+$/.test(name)) {
           return JSON.stringify({ error: 'Invalid connection name. Use only letters, numbers, hyphens, underscores.' });
@@ -868,7 +869,7 @@ Return ONLY a JSON object mapping tool names to arrays of permission rules. Exam
           });
 
           responseText = await res.text();
-          console.log(`    -> ${res.status}`);
+          logger.debug({ status: res.status }, 'CONN create response');
 
           if (!res.ok) {
             return JSON.stringify({ error: `Registration failed: HTTP ${res.status} ${res.statusText}`, data: responseText.substring(0, 500) });
@@ -911,7 +912,7 @@ Return ONLY a JSON object mapping tool names to arrays of permission rules. Exam
           },
         };
         await writeSettings(settings);
-        console.log(`  🔌 [CONN] Saved connection "${name}" to settings.json`);
+        logger.info({ name }, 'CONN saved connection to settings.json');
 
         return JSON.stringify({
           success: true,
@@ -933,7 +934,7 @@ Return ONLY a JSON object mapping tool names to arrays of permission rules. Exam
         required: ['name', 'prompt'],
       }),
       execute: async ({ name, prompt }: { name: string; prompt: string }) => {
-        console.log(`  💬 [SKILL.PROMPT] Starting chat with "${name}"`);
+        logger.info({ skill: name }, 'SKILL.PROMPT starting chat');
 
         // 1. Validate name
         if (!/^[a-zA-Z0-9_-]+$/.test(name)) {
@@ -962,9 +963,9 @@ Return ONLY a JSON object mapping tool names to arrays of permission rules. Exam
         const sandboxed = createSandboxedTools(allTools, skillPermissions);
 
         if (Object.keys(sandboxed).length === 0) {
-          console.log(`  🔒 [SKILL.PROMPT] "${name}": no tools allowed, text-only mode`);
+          logger.info({ skill: name }, 'SKILL.PROMPT no tools allowed, text-only mode');
         } else {
-          console.log(`  🔒 [SKILL.PROMPT] "${name}": sandboxed tools: ${Object.keys(sandboxed).join(', ')}`);
+          logger.info({ skill: name, tools: Object.keys(sandboxed) }, 'SKILL.PROMPT sandboxed tools');
         }
 
         // 5. Load per-skill message history (single table, partitioned by name)
@@ -979,7 +980,7 @@ Return ONLY a JSON object mapping tool names to arrays of permission rules. Exam
         messages.push({ role: 'user', content: prompt });
 
         // 6. Run skill via streamText (agentic — multi-step tool use, up to 15 steps)
-        console.log(`  💬 [SKILL.PROMPT] Running "${name}" with prompt: ${prompt.substring(0, 80)}...`);
+        logger.debug({ skill: name, prompt: prompt.substring(0, 80) }, 'SKILL.PROMPT running');
         try {
           const result = streamText({
             model,
@@ -992,7 +993,7 @@ Return ONLY a JSON object mapping tool names to arrays of permission rules. Exam
             onStepFinish: (step) => {
               if (step.toolCalls.length > 0) {
                 const toolNames = step.toolCalls.map(t => t.toolName).join(', ');
-                console.log(`  🛠️  [SKILL.PROMPT/${name}] Executed: ${toolNames}`);
+                logger.debug({ skill: name, tools: toolNames }, 'SKILL.PROMPT executed tools');
               }
             },
           });
@@ -1016,7 +1017,7 @@ Return ONLY a JSON object mapping tool names to arrays of permission rules. Exam
 
           return fullResponse || JSON.stringify({ success: true, response: '(no text response — tool actions only)' });
         } catch (e: any) {
-          console.error(`  ❌ [SKILL.PROMPT] Error:`, e);
+          logger.error({ err: e }, 'SKILL.PROMPT error');
           return JSON.stringify({ error: `Skill chat failed: ${e.message}` });
         }
       },
@@ -1054,9 +1055,9 @@ async function runAgent(
       onStepFinish: (step) => {
         if (step.toolCalls.length > 0) {
           const names = step.toolCalls.map(t => t.toolName).join(', ');
-          console.log(`  🛠️  [Executed: ${names}, ${step.usage.totalTokens} tokens] `);
+          logger.debug({ tools: names, tokens: step.usage.totalTokens }, 'Agent executed tools');
         } else {
-          console.log(`  💸  [Finalized: ${step.usage.totalTokens} tokens]`)
+          logger.debug({ tokens: step.usage.totalTokens }, 'Agent finalized step');
         }
         overallSteps += 1;
         overallInputTokens += step.usage.inputTokens || 0;
@@ -1076,10 +1077,10 @@ async function runAgent(
     const inputTokenPrice = process.env.AI_GATEWAY_INPUT_TOKEN_PRICE;
     const outputTokenPrice = process.env.AI_GATEWAY_OUTPUT_TOKEN_PRICE;
     if (inputTokenPrice && outputTokenPrice) {
-      const price = parseFloat(inputTokenPrice) * overallInputTokens + parseFloat(outputTokenPrice) * overallOutputTokens;
-      console.log(`  💸  [Took overall ${overallSteps} steps, ${overallInputTokens} input tokens, ${overallOutputTokens} output tokens, ${price} costs]`)
+      const price = (parseFloat(inputTokenPrice) * overallInputTokens + parseFloat(outputTokenPrice) * overallOutputTokens) / 1000000;
+      logger.info({ steps: overallSteps, inputTokens: overallInputTokens, outputTokens: overallOutputTokens, cost: price }, 'Agent run completed');
     } else {
-      console.log(`  💸  [Took overall ${overallSteps} steps, ${overallInputTokens} input tokens, ${overallOutputTokens} output tokens]`)
+      logger.info({ steps: overallSteps, inputTokens: overallInputTokens, outputTokens: overallOutputTokens }, 'Agent run completed');
     }
 
     const responseMessages = (await result.response).messages;
@@ -1088,7 +1089,7 @@ async function runAgent(
     return responseMessages;
 
   } catch (e) {
-    console.error("\n❌ Error:", e);
+    logger.error({ err: e }, 'Agent run error');
     return [];
   }
 }
@@ -1156,9 +1157,9 @@ export class Agent {
       try {
         await mkdir(workspaceDir, { recursive: true });
         await copyFile(templatePath, agentsMdPath);
-        console.log(`  📋 Copied AGENTS.template -> workspace/AGENTS.md`);
+        logger.info('Copied AGENTS.template -> workspace/AGENTS.md');
       } catch (e: any) {
-        console.error(`  ⚠️ Failed to copy AGENTS.template: ${e.message}`);
+        logger.error({ err: e }, 'Failed to copy AGENTS.template');
       }
     }
 
@@ -1178,9 +1179,9 @@ export class Agent {
       try {
         const bootstrapPath = path.join(PACKAGE_ROOT, 'template', 'BOOTSTRAP.md');
         this.bootstrapPrompt = await readFile(bootstrapPath, 'utf-8');
-        console.log(`  🚀 Bootstrap mode: SOUL.md, IDENTITY.md, or USER.md missing. Running BOOTSTRAP.md first.`);
+        logger.info('Bootstrap mode: SOUL.md, IDENTITY.md, or USER.md missing. Running BOOTSTRAP.md first.');
       } catch (e: any) {
-        console.error(`  ⚠️ Failed to read BOOTSTRAP.md: ${e.message}`);
+        logger.error({ err: e }, 'Failed to read BOOTSTRAP.md');
       }
     }
 
@@ -1188,9 +1189,9 @@ export class Agent {
     const savedMessages : ModelMessage[] = []; // (await this.memory.history.getAll());
     if (savedMessages.length > 0) {
       this.messages = savedMessages as ModelMessage[];
-      console.log(`  📜 Loaded ${savedMessages.length} messages from history.`);
+      logger.info({ count: savedMessages.length }, 'Loaded messages from history');
     } else {
-      console.log(`  📜 Did not load any messages from history.`);
+      logger.debug('No messages loaded from history');
     }
   }
 
@@ -1203,7 +1204,7 @@ export class Agent {
   private async compactHistory() {
     if (this.messages.length < COMPACT_THRESHOLD) return;
 
-    console.log(`  🗜️  Compacting history: ${this.messages.length} messages -> summarizing first ${COMPACT_RANGE} (after system prompt)...`);
+    logger.info({count: this.messages.length}, `messages compacted.`);
 
     const toSummarize = this.messages.slice(0, COMPACT_RANGE); 
     const remaining = this.messages.slice(COMPACT_RANGE);
@@ -1306,7 +1307,7 @@ export class Agent {
     let fullResponse = "";
     try {
       const newMessages = await runAgent(input, this.memory, this.model, this.messages, this.tools, (chunk) => {
-        fullResponse += chunk;
+      fullResponse += chunk;
         for (const out of this.outputAdapters) {
           out.onResponseChunk(chunk);
         }
