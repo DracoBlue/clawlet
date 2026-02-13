@@ -24,6 +24,10 @@ import TurndownService from 'turndown';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const PACKAGE_ROOT = path.resolve(__dirname, '..');
+const GENERATE_TEXT_TEMPERATURE = 0.6;
+const GENERATE_TEXT_TOP_P = 0.95;
+const GENERATE_TEXT_MAX_OUTPUT_TOKENS = 16384;
+const GENERATE_TEXT_MAX_STEPS = 30;
 
 // --- ADAPTER INTERFACES ---
 
@@ -38,25 +42,6 @@ export interface OutputAdapter {
   onResponseEnd(fullResponse: string): void;
   onError(error: Error): void;
 }
-
-// --- MODEL SETUP ---
-const localProvider = createOpenAICompatible({
-  name: 'mlx',
-  baseURL: 'http://localhost:8000/v1',
-});
-
-export const localModel : LanguageModel = wrapLanguageModel({
-  model: localProvider.languageModel('qwen-local'),
-  middleware: [
-    hermesToolMiddleware,
-    addToolInputExamplesMiddleware({
-      prefix: 'Input Examples:',
-    }),
-    extractReasoningMiddleware({
-      tagName: "think"
-    })
-  ]
-});
 
 const turndownService = new TurndownService()
 
@@ -216,7 +201,7 @@ function createSandboxedTools(
 
 // --- TOOLS (built from memory) ---
 
-function createTools(memory: AgentMemory) {
+function createTools(memory: AgentMemory, model: LanguageModel) {
   return {
     now: tool({
       description: 'Get current time and date',
@@ -663,7 +648,7 @@ function createTools(memory: AgentMemory) {
         let additionalFiles: Array<{ url: string; filename: string }> = [];
         try {
           const { text: installJson } = await generateText({
-            model: localModel,
+            model,
             messages: [
               {
                 role: 'system',
@@ -709,7 +694,7 @@ Do NOT include SKILL.md itself. If no additional files, return [].`,
         let skillPermissions: Record<string, Array<Record<string, string>>> = {};
         try {
           const { text: permJson } = await generateText({
-            model: localModel,
+            model,
             messages: [
               {
                 role: 'system',
@@ -997,12 +982,13 @@ Return ONLY a JSON object mapping tool names to arrays of permission rules. Exam
         console.log(`  💬 [SKILL.PROMPT] Running "${name}" with prompt: ${prompt.substring(0, 80)}...`);
         try {
           const result = streamText({
-            model: localModel,
+            model,
             messages,
             tools: Object.keys(sandboxed).length > 0 ? sandboxed : {},
-            temperature: 0.6,
-            topP: 0.95,
-            stopWhen: stepCountIs(30),
+            temperature: GENERATE_TEXT_TEMPERATURE,
+            topP: GENERATE_TEXT_TOP_P,
+            maxOutputTokens: GENERATE_TEXT_MAX_OUTPUT_TOKENS,
+            stopWhen: stepCountIs(GENERATE_TEXT_MAX_STEPS),
             onStepFinish: (step) => {
               if (step.toolCalls.length > 0) {
                 const toolNames = step.toolCalls.map(t => t.toolName).join(', ');
@@ -1043,6 +1029,7 @@ Return ONLY a JSON object mapping tool names to arrays of permission rules. Exam
 async function runAgent(
   input: string,
   memory: AgentMemory,
+  model: LanguageModel,
   messages: ModelMessage[],
   tools: ReturnType<typeof createTools>,
   onResponseChunk?: (chunk: string) => void
@@ -1051,20 +1038,29 @@ async function runAgent(
   messages.push(message);
 
   try {
+    let overallInputTokens = 0;
+    let overallOutputTokens = 0;
+    let overallSteps = 0;
     const result = await streamText({
-      model: localModel,
+      model,
       system: await buildSystemPrompt(memory),
       messages,
       tools,
-      temperature: 0.6,
-      topP: 0.95,
-      stopWhen: stepCountIs(30),
+      temperature: GENERATE_TEXT_TEMPERATURE,
+      topP: GENERATE_TEXT_TOP_P,
+      maxOutputTokens: GENERATE_TEXT_MAX_OUTPUT_TOKENS,
+      stopWhen: stepCountIs(GENERATE_TEXT_MAX_STEPS),
 
       onStepFinish: (step) => {
         if (step.toolCalls.length > 0) {
           const names = step.toolCalls.map(t => t.toolName).join(', ');
-          console.log(`  🛠️  [Executed: ${names}] `);
+          console.log(`  🛠️  [Executed: ${names}, ${step.usage.totalTokens} tokens] `);
+        } else {
+          console.log(`  💸  [Finalized: ${step.usage.totalTokens} tokens]`)
         }
+        overallSteps += 1;
+        overallInputTokens += step.usage.inputTokens || 0;
+        overallOutputTokens += step.usage.outputTokens || 0
       },
     });
 
@@ -1075,6 +1071,15 @@ async function runAgent(
       if (onResponseChunk) {
         onResponseChunk(delta);
       }
+    }
+
+    const inputTokenPrice = process.env.AI_GATEWAY_INPUT_TOKEN_PRICE;
+    const outputTokenPrice = process.env.AI_GATEWAY_OUTPUT_TOKEN_PRICE;
+    if (inputTokenPrice && outputTokenPrice) {
+      const price = parseFloat(inputTokenPrice) * overallInputTokens + parseFloat(outputTokenPrice) * overallOutputTokens;
+      console.log(`  💸  [Took overall ${overallSteps} steps, ${overallInputTokens} input tokens, ${overallOutputTokens} output tokens, ${price} costs]`)
+    } else {
+      console.log(`  💸  [Took overall ${overallSteps} steps, ${overallInputTokens} input tokens, ${overallOutputTokens} output tokens]`)
     }
 
     const responseMessages = (await result.response).messages;
@@ -1096,6 +1101,7 @@ const COMPACT_RANGE = 10;      // Number of messages to summarize (items 1..10, 
 
 export class Agent {
   private memory: AgentMemory;
+  private model: LanguageModel;
   private messages: ModelMessage[] = [];
   private tools: ReturnType<typeof createTools>;
   private inputAdapters: InputAdapter[] = [];
@@ -1105,9 +1111,10 @@ export class Agent {
   private initialized = false;
   private bootstrapPrompt: string | null = null;
 
-  constructor(memory?: AgentMemory) {
-    this.memory = memory ?? new AgentMemory();
-    this.tools = createTools(this.memory);
+  constructor(memory: AgentMemory, model: LanguageModel) {
+    this.memory = memory;
+    this.model = model;
+    this.tools = createTools(this.memory, this.model);
   }
 
   addInput(adapter: InputAdapter): this {
@@ -1212,7 +1219,7 @@ export class Agent {
 
     try {
       const { text: summary } = await generateText({
-        model: localModel,
+        model: this.model,
         messages: [
           {
             role: 'system',
@@ -1298,7 +1305,7 @@ export class Agent {
 
     let fullResponse = "";
     try {
-      const newMessages = await runAgent(input, this.memory, this.messages, this.tools, (chunk) => {
+      const newMessages = await runAgent(input, this.memory, this.model, this.messages, this.tools, (chunk) => {
         fullResponse += chunk;
         for (const out of this.outputAdapters) {
           out.onResponseChunk(chunk);

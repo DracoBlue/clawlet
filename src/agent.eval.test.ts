@@ -6,10 +6,11 @@ import YAML from 'yaml';
 import { createStorage } from 'unstorage';
 import memoryDriver from 'unstorage/drivers/memory';
 import { generateText } from 'ai';
-import { Agent, localModel } from './agent.js';
+import { Agent } from './agent.js';
 import { AgentMemory } from './memory.js';
 import { LibSqlKeyValueStorage, LibSqlListStorage, SkillHistoryStorage } from './storage.js';
 import type { ModelMessage } from 'ai';
+import { model } from './llm.js';
 
 // --- MOCK SETUP ---
 class TestAgentMemory extends AgentMemory {
@@ -55,7 +56,7 @@ async function runLlmJudge(
   agentOutput: string
 ): Promise<{ pass: boolean; reasoning: string }> {
   const { text } = await generateText({
-    model: localModel,
+    model,
     messages: [
       {
         role: 'system',
@@ -111,7 +112,7 @@ describe('Agent Evals (LLM)', () => {
       }
 
       // 2. EXECUTION
-      const agent = new Agent(memory);
+      const agent = new Agent(memory, model);
       let output = "";
 
       // Output capture

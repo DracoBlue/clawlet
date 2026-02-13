@@ -2,6 +2,8 @@ import * as readline from 'readline';
 import 'dotenv/config';
 import { Agent, type InputAdapter, type OutputAdapter } from './agent.js';
 import { Bot } from 'grammy';
+import { model } from './llm.js';
+import { AgentMemory } from './memory.js';
 
 // --- CLI Input Adapter ---
 
@@ -166,7 +168,7 @@ const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_USERINFO_ID = process.env.TELEGRAM_USERINFO_ID;
 
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout, prompt: '\nYou: ' });
-const agent = new Agent();
+const agent = new Agent(new AgentMemory(), model);
 
 // Always add CLI adapters
 agent.addInput(new CliInput(rl));
