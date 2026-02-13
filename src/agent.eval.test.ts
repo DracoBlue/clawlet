@@ -134,7 +134,14 @@ describe('Agent Evals (LLM)', () => {
         });
       }
 
-      // b) Response keywords (ANY must match — at least one)
+      // b) Response keywords (ALL must not match)
+      if (data.validate?.response?.must_not_contain) {
+        data.validate.response.must_not_contain.forEach((keyword: string) => {
+          expect(output.toLowerCase()).not.toContain(keyword.toLowerCase());
+        });
+      }
+
+      // c) Response keywords (ANY must match — at least one)
       if (data.validate?.response?.contains_any) {
         const matches = data.validate.response.contains_any.some(
           (keyword: string) => output.toLowerCase().includes(keyword.toLowerCase())
@@ -145,7 +152,7 @@ describe('Agent Evals (LLM)', () => {
         ).toBe(true);
       }
 
-      // c) File content check
+      // d) File content check
       if (data.validate?.files) {
         for (const [filepath, rules] of Object.entries(data.validate.files as Record<string, any>)) {
           const storageKey = normalizeStorageKey(filepath);
@@ -187,7 +194,7 @@ describe('Agent Evals (LLM)', () => {
         }
       }
 
-      // d) KV store assertions
+      // e) KV store assertions
       if (data.validate?.kv) {
         for (const [key, rules] of Object.entries(data.validate.kv as Record<string, any>)) {
           const value = await memory.secrets.get(key);
@@ -203,7 +210,7 @@ describe('Agent Evals (LLM)', () => {
         }
       }
 
-      // e) LLM judge evaluation using localModel
+      // f) LLM judge evaluation using localModel
       if (data.validate?.llm_eval) {
         const { pass, reasoning } = await runLlmJudge(
           data.validate.llm_eval,
