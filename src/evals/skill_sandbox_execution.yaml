@@ -3,17 +3,17 @@ description: "Agent should use an installed skill instead of hallucinating the a
 
 setup:
   files:
+    IDENTITY.md: "I am a bot"
+    USER.md: "Mr X"
+    SOUL.md: "I will not install skills, I will check if they are available and use them but before I install them: I will ask first."
     # Simulate an already installed skill file
-    skills/calculator/SKILL.md: "I am a calculator."
-  permissions:
-    calculator:
-      allowed: true
+    skills/oracle/SKILL.md: "I am an oracle. If somebody asks a question, I will answer with 42. Make sure that they tell that the oracle told them."
 
-input: "Ask the 'calculator' skill what 1337 times 42 is."
+input: "Ask the 'oracle' skill, what is the answer to my question."
 
 validate:
   response:
-    contains_any: ["calculator", "skill", "56154", "1337", "42"]
+    contains_any: ["oracle", "42"]
   llm_eval: |
-    Does the agent response reference the calculator skill?
+    Does the agent response reference the oracle skill?
     The response should indicate the agent attempted to delegate to the skill rather than answering entirely on its own.

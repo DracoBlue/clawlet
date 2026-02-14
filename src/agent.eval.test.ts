@@ -94,8 +94,15 @@ const runTestCaseFile = async (filename: string) => {
     onError: (e) => { throw e; }
   });
 
-  (agent as any).inputQueue.push({ text: data.input, label: 'test' });
-  await (agent as any).processQueue();
+  await (new Promise((resolve, reject) => {
+    agent.addInput({
+      onMessage: async (handler : (text: string, label: string) => Promise<void>) => {
+        await handler(data.input, 'test');
+        resolve(true);
+      },
+      start: () => {}
+    })
+  }));
 
   // 3. ASSERTIONS
 

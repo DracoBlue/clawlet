@@ -152,9 +152,14 @@ export class LibSqlFiFoStorage<T> {
     private client: Client;
     private tableName = 'queue_items';
 
-    constructor(url: string, authToken?: string) {
+    private constructor(url: string, authToken?: string) {
         this.client = authToken ? createClient({ url, authToken }) : createClient({ url });
-        this.init();
+    }
+
+    static async create<T>(url: string, authToken?: string): Promise<LibSqlFiFoStorage<T>> {
+        const storage = new LibSqlFiFoStorage<T>(url, authToken);
+        await storage.init();
+        return storage;
     }
 
     private async init(): Promise<void> {

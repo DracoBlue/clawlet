@@ -2,7 +2,7 @@ import { createStorage, type Storage } from "unstorage";
 import fsDriver from "unstorage/drivers/fs";
 import { generateText, type LanguageModel, type ModelMessage } from "ai";
 import path from "path";
-import { LibSqlKeyValueStorage, LibSqlListStorage } from "./storage.js";
+import { LibSqlKeyValueStorage, LibSqlListStorage, LibSqlFiFoStorage } from "./storage.js";
 import { logger } from './logger.js';
 import memoryDriver from 'unstorage/drivers/memory';
 
@@ -21,17 +21,22 @@ export class AgentMemory {
   // 3. Workspace (Unstorage - ./workspace)
   public workspace: Storage;
 
-  private constructor(secrets: LibSqlKeyValueStorage, history: LibSqlListStorage<ModelMessage>, workspace: Storage) {
+  // 4. Fifo Queue (libSQL - file:queue.db)
+  public queue: LibSqlFiFoStorage<{ text: string, label: string}>;
+
+  private constructor(secrets: LibSqlKeyValueStorage, history: LibSqlListStorage<ModelMessage>, workspace: Storage, queue: LibSqlFiFoStorage<{ text: string, label: string}>) {
     this.secrets = secrets;
     this.history = history;
-    this.workspace = workspace
+    this.workspace = workspace;
+    this.queue = queue;
   }
 
   static async createInMemory() {
     return new AgentMemory(
       await LibSqlKeyValueStorage.create(':memory:'),
       await LibSqlListStorage.create<ModelMessage>(':memory:'),
-      createStorage({ driver: memoryDriver() })
+      createStorage({ driver: memoryDriver() }),
+      await LibSqlFiFoStorage.create(':memory:')
     );
   }
 
@@ -47,7 +52,11 @@ export class AgentMemory {
       ),
       createStorage({
         driver: fsDriver({ base: path.join(process.cwd(), "workspace") })
-      })
+      }),
+      await LibSqlFiFoStorage.create(
+        process.env.QUEUE_DB_URL || "file:queue.db",
+        process.env.QUEUE_AUTH_TOKEN
+      )
     );
   }
 

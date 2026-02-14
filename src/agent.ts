@@ -24,7 +24,7 @@ const GENERATE_TEXT_MAX_STEPS = 30;
 // --- ADAPTER INTERFACES ---
 
 export interface InputAdapter {
-  onMessage(handler: (text: string, label: string) => void): void;
+  onMessage(handler: (text: string, label: string) => Promise<void>): void;
   start(): void;
 }
 
@@ -194,7 +194,6 @@ export class Agent {
   private tools: ReturnType<typeof createTools>;
   private inputAdapters: InputAdapter[] = [];
   private outputAdapters: OutputAdapter[] = [];
-  private inputQueue: { text: string; label: string }[] = [];
   private processing = false;
   private initialized = false;
   private bootstrapPrompt: string | null = null;
@@ -207,9 +206,9 @@ export class Agent {
 
   addInput(adapter: InputAdapter): this {
     this.inputAdapters.push(adapter);
-    adapter.onMessage((text, label) => {
-      this.inputQueue.push({ text, label });
-      this.processQueue();
+    adapter.onMessage(async (text, label) => {
+      await this.memory.queue.push("main-session", { text, label });
+      await this.processQueue();
     });
     return this;
   }
@@ -224,6 +223,7 @@ export class Agent {
     for (const adapter of this.inputAdapters) {
       adapter.start();
     }
+    await this.processQueue();
   }
 
   private async init() {
@@ -284,11 +284,17 @@ export class Agent {
 
 
   private async processQueue() {
-    if (this.processing || this.inputQueue.length === 0) return;
+    if (this.processing) return;
+    if (await this.memory.queue.empty("main-session")) return ;
     if (!this.initialized) await this.init();
     this.processing = true;
 
-    const { text, label } = this.inputQueue.shift()!;
+    const queuedItem = await this.memory.queue.pop("main-session");
+    if (!queuedItem) {
+        this.processing = false;
+        return;
+    }
+    const { text, label } = queuedItem;
 
     for (const out of this.outputAdapters) {
       out.onAgentStart(label);
@@ -364,6 +370,5 @@ export class Agent {
     }
 
     this.processing = false;
-    this.processQueue();
   }
 }
