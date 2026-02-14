@@ -8,21 +8,10 @@ import { Agent } from './agent.js';
 import { AgentMemory } from './memory.js';
 import { model } from './llm.js';
 
-
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const evalDir = path.join(__dirname, 'evals');
-const dirFiles = await fs.readdir(evalDir);
-const yamlFiles = dirFiles.filter(f => f.endsWith('.yaml') || f.endsWith('.yml'));
-
-const testCases = await Promise.all(yamlFiles.map(async (file) => {
-  const content = await fs.readFile(path.join(evalDir, file), 'utf-8');
-  return {
-    filename: file,
-    data: YAML.parse(content)
-  };
-}));
 
 /**
  * Unstorage uses `:` as path separator internally.
@@ -73,140 +62,157 @@ Reasoning: <brief explanation>`
 // Default timeout for LLM-backed eval tests (2 minutes)
 const EVAL_TIMEOUT = 120_000;
 
-describe('Agent Evals (LLM)', () => {
+const runTestCaseFile = async (filename: string) => {
+  const content = await fs.readFile(path.join(evalDir, filename), 'utf-8');
+  const data = YAML.parse(content);
+  // 1. SETUP
+  const memory = await AgentMemory.createInMemory();
 
-  testCases.forEach(({ filename, data }) => {
-    // Per-test timeout: YAML can override via `timeout` field
-    const timeout = data.timeout ?? EVAL_TIMEOUT;
+  // Seed workspace files
+  if (data.setup?.files) {
+    for (const [name, content] of Object.entries(data.setup.files)) {
+      await memory.workspace.setItem(normalizeStorageKey(name), content as string);
+    }
+  }
 
-    it(`Eval: ${data.name} (${filename})`, async () => {
-      // 1. SETUP
-      const memory = await AgentMemory.createInMemory();
+  // Seed KV store
+  if (data.setup?.kv) {
+    for (const [key, value] of Object.entries(data.setup.kv)) {
+      await memory.secrets.set(key, value as string);
+    }
+  }
 
-      // Seed workspace files
-      if (data.setup?.files) {
-        for (const [name, content] of Object.entries(data.setup.files)) {
-          await memory.workspace.setItem(normalizeStorageKey(name), content as string);
-        }
-      }
+  // 2. EXECUTION
+  const agent = new Agent(memory, model);
+  let output = "";
 
-      // Seed KV store
-      if (data.setup?.kv) {
-        for (const [key, value] of Object.entries(data.setup.kv)) {
-          await memory.secrets.set(key, value as string);
-        }
-      }
+  // Output capture
+  agent.addOutput({
+    onAgentStart: () => {},
+    onResponseChunk: () => {},
+    onResponseEnd: (full) => { output = full; },
+    onError: (e) => { throw e; }
+  });
 
-      // 2. EXECUTION
-      const agent = new Agent(memory, model);
-      let output = "";
+  (agent as any).inputQueue.push({ text: data.input, label: 'test' });
+  await (agent as any).processQueue();
 
-      // Output capture
-      agent.addOutput({
-        onAgentStart: () => {},
-        onResponseChunk: () => {},
-        onResponseEnd: (full) => { output = full; },
-        onError: (e) => { throw e; }
-      });
+  // 3. ASSERTIONS
 
-      (agent as any).inputQueue.push({ text: data.input, label: 'test' });
-      await (agent as any).processQueue();
+  // a) Response keywords (ALL must match)
+  if (data.validate?.response?.contains) {
+    data.validate.response.contains.forEach((keyword: string) => {
+      expect(output.toLowerCase()).toContain(keyword.toLowerCase());
+    });
+  }
 
-      // 3. ASSERTIONS
+  // b) Response keywords (ALL must not match)
+  if (data.validate?.response?.must_not_contain) {
+    data.validate.response.must_not_contain.forEach((keyword: string) => {
+      expect(output.toLowerCase()).not.toContain(keyword.toLowerCase());
+    });
+  }
 
-      // a) Response keywords (ALL must match)
-      if (data.validate?.response?.contains) {
-        data.validate.response.contains.forEach((keyword: string) => {
-          expect(output.toLowerCase()).toContain(keyword.toLowerCase());
+  // c) Response keywords (ANY must match — at least one)
+  if (data.validate?.response?.contains_any) {
+    const matches = data.validate.response.contains_any.some(
+      (keyword: string) => output.toLowerCase().includes(keyword.toLowerCase())
+    );
+    expect(
+      matches,
+      `Expected response to contain at least one of: ${data.validate.response.contains_any.join(', ')}`
+    ).toBe(true);
+  }
+
+  // d) File content check
+  if (data.validate?.files) {
+    for (const [filepath, rules] of Object.entries(data.validate.files as Record<string, any>)) {
+      const storageKey = normalizeStorageKey(filepath);
+      const content = await memory.workspace.getItem(storageKey);
+      // Unstorage memory driver may auto-parse JSON strings into objects
+      const textContent = content
+        ? (typeof content === 'object' ? JSON.stringify(content, null, 2) : String(content))
+        : "";
+
+      // ALL must be present
+      if (rules.contains) {
+        rules.contains.forEach((str: string) => {
+          expect(textContent, `File "${filepath}" should contain "${str}"`).toContain(str);
         });
       }
 
-      // b) Response keywords (ALL must not match)
-      if (data.validate?.response?.must_not_contain) {
-        data.validate.response.must_not_contain.forEach((keyword: string) => {
-          expect(output.toLowerCase()).not.toContain(keyword.toLowerCase());
-        });
-      }
-
-      // c) Response keywords (ANY must match — at least one)
-      if (data.validate?.response?.contains_any) {
-        const matches = data.validate.response.contains_any.some(
-          (keyword: string) => output.toLowerCase().includes(keyword.toLowerCase())
+      // At least ONE must be present
+      if (rules.contains_any) {
+        const matches = rules.contains_any.some(
+          (str: string) => textContent.includes(str)
         );
         expect(
           matches,
-          `Expected response to contain at least one of: ${data.validate.response.contains_any.join(', ')}`
+          `File "${filepath}" should contain at least one of: ${rules.contains_any.join(', ')}`
         ).toBe(true);
       }
 
-      // d) File content check
-      if (data.validate?.files) {
-        for (const [filepath, rules] of Object.entries(data.validate.files as Record<string, any>)) {
-          const storageKey = normalizeStorageKey(filepath);
-          const content = await memory.workspace.getItem(storageKey);
-          // Unstorage memory driver may auto-parse JSON strings into objects
-          const textContent = content
-            ? (typeof content === 'object' ? JSON.stringify(content, null, 2) : String(content))
-            : "";
-
-          // ALL must be present
-          if (rules.contains) {
-            rules.contains.forEach((str: string) => {
-              expect(textContent, `File "${filepath}" should contain "${str}"`).toContain(str);
-            });
-          }
-
-          // At least ONE must be present
-          if (rules.contains_any) {
-            const matches = rules.contains_any.some(
-              (str: string) => textContent.includes(str)
-            );
-            expect(
-              matches,
-              `File "${filepath}" should contain at least one of: ${rules.contains_any.join(', ')}`
-            ).toBe(true);
-          }
-
-          // NONE must be present
-          if (rules.must_not_contain) {
-            rules.must_not_contain.forEach((str: string) => {
-              expect(textContent, `File "${filepath}" should NOT contain "${str}"`).not.toContain(str);
-            });
-          }
-
-          // File must exist (non-empty)
-          if (rules.exists === true) {
-            expect(textContent.length, `File "${filepath}" should exist and not be empty`).toBeGreaterThan(0);
-          }
-        }
+      // NONE must be present
+      if (rules.must_not_contain) {
+        rules.must_not_contain.forEach((str: string) => {
+          expect(textContent, `File "${filepath}" should NOT contain "${str}"`).not.toContain(str);
+        });
       }
 
-      // e) KV store assertions
-      if (data.validate?.kv) {
-        for (const [key, rules] of Object.entries(data.validate.kv as Record<string, any>)) {
-          const value = await memory.secrets.get(key);
-
-          if (rules.exists === true) {
-            expect(value, `KV key "${key}" should exist`).not.toBeNull();
-          }
-          if (rules.contains) {
-            rules.contains.forEach((str: string) => {
-              expect(value ?? '', `KV key "${key}" should contain "${str}"`).toContain(str);
-            });
-          }
-        }
+      // File must exist (non-empty)
+      if (rules.exists === true) {
+        expect(textContent.length, `File "${filepath}" should exist and not be empty`).toBeGreaterThan(0);
       }
+    }
+  }
 
-      // f) LLM judge evaluation using localModel
-      if (data.validate?.llm_eval) {
-        const { pass, reasoning } = await runLlmJudge(
-          data.validate.llm_eval,
-          data.input,
-          output
-        );
-        expect(pass, `LLM judge failed:\n${reasoning}`).toBe(true);
+  // e) KV store assertions
+  if (data.validate?.kv) {
+    for (const [key, rules] of Object.entries(data.validate.kv as Record<string, any>)) {
+      const value = await memory.secrets.get(key);
+
+      if (rules.exists === true) {
+        expect(value, `KV key "${key}" should exist`).not.toBeNull();
       }
+      if (rules.contains) {
+        rules.contains.forEach((str: string) => {
+          expect(value ?? '', `KV key "${key}" should contain "${str}"`).toContain(str);
+        });
+      }
+    }
+  }
 
-    }, timeout);
-  });
+  // f) LLM judge evaluation using localModel
+  if (data.validate?.llm_eval) {
+    const { pass, reasoning } = await runLlmJudge(
+      data.validate.llm_eval,
+      data.input,
+      output
+    );
+    expect(pass, `LLM judge failed:\n${reasoning}`).toBe(true);
+  }
+}
+
+describe('Agent Evals (LLM)', () => {
+  it(`bootstrap_trigger`, async () => runTestCaseFile('bootstrap_trigger.yaml'), EVAL_TIMEOUT);
+  it(`connection_auth`, async () => runTestCaseFile('connection_auth.yaml'), EVAL_TIMEOUT);
+  it(`create_python_file`, async () => runTestCaseFile('create_python_file.yaml'), EVAL_TIMEOUT);
+  it(`directory_traversal`, async () => runTestCaseFile('directory_traversal.yaml'), EVAL_TIMEOUT);
+  it(`empty_directory`, async () => runTestCaseFile('empty_directory.yaml'), EVAL_TIMEOUT);
+  it(`extend_agents_md`, async () => runTestCaseFile('extend_agents_md.yaml'), EVAL_TIMEOUT);
+  it(`external_data`, async () => runTestCaseFile('external_data.yaml'), EVAL_TIMEOUT);
+  it(`file_not_found`, async () => runTestCaseFile('file_not_found.yaml'), EVAL_TIMEOUT);
+  it(`memory_persistence`, async () => runTestCaseFile('memory_persistence.yaml'), EVAL_TIMEOUT);
+  it(`move_and_rename`, async () => runTestCaseFile('move_and_rename.yaml'), EVAL_TIMEOUT);
+  it(`needle_in_haystack`, async () => runTestCaseFile('needle_in_haystack.yaml'), EVAL_TIMEOUT);
+  it(`persona_tone`, async () => runTestCaseFile('persona_tone.yaml'), EVAL_TIMEOUT);
+  it(`rag_user`, async () => runTestCaseFile('rag_user.yaml'), EVAL_TIMEOUT);
+  it(`reasoning_multi_step`, async () => runTestCaseFile('reasoning_multi_step.yaml'), EVAL_TIMEOUT);
+  it(`refactoring_edit`, async () => runTestCaseFile('refactoring_edit.yaml'), EVAL_TIMEOUT);
+  it(`skill_sandbox_execution`, async () => runTestCaseFile('skill_sandbox_execution.yaml'), EVAL_TIMEOUT);
+  it(`skill_system_installation`, async () => runTestCaseFile('skill_system_installation.yaml'), EVAL_TIMEOUT);
+  it(`soft_delete`, async () => runTestCaseFile('soft_delete.yaml'), EVAL_TIMEOUT);
+  it(`stat_check`, async () => runTestCaseFile('stat_check.yaml'), EVAL_TIMEOUT);
+  it(`workflow_cleanup`, async () => runTestCaseFile('workflow_cleanup.yaml'), EVAL_TIMEOUT);
+  it(`write_complex_json`, async () => runTestCaseFile('write_complex_json.yaml'), EVAL_TIMEOUT);
 });
