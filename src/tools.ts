@@ -62,6 +62,99 @@ function matchesPermissionPattern(actual: string, pattern: string): boolean {
   return new RegExp(`^${escaped}$`).test(actual);
 }
 
+function getTodayString(): string {
+  return new Date().toISOString().split('T')[0] ?? '';
+}
+
+
+// --- SKILL SYSTEM PROMPT ---
+async function buildSkillSystemPrompt(name: string, memory: AgentMemory, skillPermissions: Record<string, Array<Record<string, string>>>, model: LanguageModel): Promise<string> {
+  // Read SOUL.md from workspace (if it exists)
+  let soulDoc = "";
+  try {
+    const doc = await memory.workspace.getItem('SOUL.md');
+    if (doc) soulDoc = String(doc);
+  } catch {}
+
+  // Read IDENTITY.md from workspace (if it exists)
+  let identityDoc = "";
+  try {
+    const doc = await memory.workspace.getItem('IDENTITY.md');
+    if (doc) identityDoc = String(doc);
+  } catch {}
+
+  // Read SKILL.md from skill in workspace (if it exists)
+  let skillDoc = "";
+  try {
+    const doc = await memory.workspace.getItem('skills:' + name + ':SKILL.md');
+    if (doc) skillDoc = String(doc);
+  } catch {}
+
+  // List all workspace files
+  let workspaceFiles = "No workspace files found.";
+  try {
+    const keys = await memory.workspace.getKeys();
+    if (keys.length > 0) workspaceFiles = keys.filter((key:string) => !key.startsWith('.trash/')).join('\n');
+  } catch {}
+
+  // Build identity section from SOUL.md and IDENTITY.md
+  let identitySection = `# IDENTITY: Clawlet
+You are "Clawlet", an autonomous agent defined by the file \`AGENTS.md\`.`;
+
+  if (identityDoc) {
+    identitySection += `\n\n## Identity Definition (IDENTITY.md)\n${identityDoc}`;
+  }
+  if (soulDoc) {
+    identitySection += `\n\n## Soul & Behavioral Guidelines (SOUL.md)\n${soulDoc}`;
+  }
+
+
+  const permissionSectionEntries = Object.keys(skillPermissions).map((toolName: string) => {
+    const permissionEntry = "- tool: " + toolName;
+    const rules: Array<Record<string, string>> = skillPermissions[toolName] as any;
+
+    if (rules.length > 0) {
+      return permissionEntry + '\n' + rules.map((rule: Record<string, string>) => {
+        return '   - ' + JSON.stringify(rule)
+      }).join('\n');
+    }
+
+    return permissionEntry + ' (no permissions)';
+  });
+
+  const permissionsSection = permissionSectionEntries.join('\n');;
+
+  return `
+${identitySection}
+
+# PRIME DIRECTIVE
+This is your main session. Your core behavior, ethics, and operational protocols are strictly defined in **AGENTS.md** below.
+You must obey these rules above all else.
+
+# OPERATIONAL PROTOCOL (The "Every Session" Loop)
+1. **INITIALIZE**:
+   - Read \`SKILL.md\` (provided below).
+   - **MANDATORY**: Check for today's memory file (\`memory:${getTodayString()}.md\`).
+   - IF it todays memory file exists -> Read it using \`fs.readFile\` to get context.
+   - IF todays mmemory file does NOT exist -> Create it using \`fs.writeFile\` (start fresh).
+
+2. **AUTH CHECK**:
+   - Before external API calls, check \`connection.list\` for available connections.
+   - If the connection is missing, use \`connection.create\` to register and store credentials.
+   - Use \`connection.request\` for authenticated API calls (Bearer token is auto-injected).
+
+3. **EXECUTION**:
+   - Use \`fs.readFile\` and \`fs.writeFile\` to log *significant* events to append oday's memory file (as per AGENTS.md rules).
+   - **Text > Brain**: If you learn something, write it down immediately.
+
+# AVAILABLE PERMISSIONS (Permissions)
+${permissionsSection}
+
+# CORE RULES (SKILL.md)
+${skillDoc}
+`;
+}
+
 // --- TOOLS (built from memory) ---
 
 export function createTools(memory: AgentMemory, model: LanguageModel) {
@@ -837,7 +930,7 @@ Return ONLY a JSON object mapping tool names to arrays of permission rules. Exam
           const parsed = JSON.parse(raw);
           skillPermissions = parsed?.skills?.[name] ?? {};
         } catch {
-          return JSON.stringify({ error: `No permissions found for skill "${name}". Run skill.install first.` });
+          return JSON.stringify({ error: `No permissions found for skill "${name}". Ask user to install skill with skill.install tool first.` });
         }
 
         // 4. Build sandboxed tools (only tools with "allowed": true, HTTP tools get URL guards)
@@ -851,12 +944,7 @@ Return ONLY a JSON object mapping tool names to arrays of permission rules. Exam
         }
 
         // 5. Load per-skill message history (single table, partitioned by name)
-        const messages: ModelMessage[] = []; // await memory.skillHistory.getAll(name);
-
-        // Inject system prompt if this is a fresh history
-        if (messages.length === 0) {
-          messages.push({ role: 'system', content: String(skillMd) });
-        }
+        const messages: ModelMessage[] = await memory.history.getAll(name);
 
         // Add user prompt
         messages.push({ role: 'user', content: prompt });
@@ -866,6 +954,7 @@ Return ONLY a JSON object mapping tool names to arrays of permission rules. Exam
         try {
           const result = streamText({
             model,
+            system: await buildSkillSystemPrompt(name, memory, skillPermissions),
             messages,
             tools: Object.keys(sandboxed).length > 0 ? sandboxed : {},
             temperature: GENERATE_TEXT_TEMPERATURE,
@@ -889,10 +978,10 @@ Return ONLY a JSON object mapping tool names to arrays of permission rules. Exam
           // Persist messages to skill history after stream completes
           const responseMessages = (await result.response).messages;
 
-          await memory.skillHistory.push(name, { role: 'user', content: prompt });
-          for (const msg of responseMessages) {
-            await memory.skillHistory.push(name, msg);
-          }
+          const messagesToSave: ModelMessage[] = [{ role: 'user', content: prompt }, ...responseMessages];
+          await memory.history.pushMany(name, messagesToSave);
+
+          await memory.compactHistory(name, model);
 
           return fullResponse || JSON.stringify({ success: true, response: '(no text response — tool actions only)' });
         } catch (e: any) {

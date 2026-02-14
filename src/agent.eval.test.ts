@@ -8,7 +8,7 @@ import memoryDriver from 'unstorage/drivers/memory';
 import { generateText } from 'ai';
 import { Agent } from './agent.js';
 import { AgentMemory } from './memory.js';
-import { LibSqlKeyValueStorage, LibSqlListStorage, SkillHistoryStorage } from './storage.js';
+import { LibSqlKeyValueStorage, LibSqlListStorage } from './storage.js';
 import type { ModelMessage } from 'ai';
 import { model } from './llm.js';
 
@@ -19,7 +19,7 @@ class TestAgentMemory extends AgentMemory {
     this.workspace = createStorage({ driver: memoryDriver() });
     this.secrets = new LibSqlKeyValueStorage(':memory:');
     this.history = new LibSqlListStorage<ModelMessage>(':memory:');
-    this.skillHistory = new SkillHistoryStorage<ModelMessage>(':memory:');
+    
   }
 }
 

@@ -185,10 +185,6 @@ async function runAgent(
   }
 }
 
-// --- COMPACTION CONFIG ---
-const COMPACT_THRESHOLD = 25;  // Trigger compaction when history reaches this many items
-const COMPACT_RANGE = 10;      // Number of messages to summarize (items 1..10, skipping system prompt at 0)
-
 // --- MAIN EXPORTED CLASS ---
 
 export class Agent {
@@ -277,7 +273,7 @@ export class Agent {
     }
 
     // Load history from DB
-    const savedMessages : ModelMessage[] = []; // (await this.memory.history.getAll());
+    const savedMessages : ModelMessage[] = await this.memory.history.getAll("main-session");
     if (savedMessages.length > 0) {
       this.messages = savedMessages as ModelMessage[];
       logger.info({ count: savedMessages.length }, 'Loaded messages from history');
@@ -286,62 +282,6 @@ export class Agent {
     }
   }
 
-  /**
-   * Compacts history when it reaches COMPACT_THRESHOLD items.
-   * Summarizes items 1..COMPACT_RANGE (the system prompt is not included) into a single message
-   * using the LLM, then replaces in-memory + persisted history.
-   * Result: summary message + remaining messages.
-   */
-  private async compactHistory() {
-    if (this.messages.length < COMPACT_THRESHOLD) return;
-
-    logger.info({count: this.messages.length}, `messages compacted.`);
-
-    const toSummarize = this.messages.slice(0, COMPACT_RANGE); 
-    const remaining = this.messages.slice(COMPACT_RANGE);
-
-    // Build a transcript for the LLM to summarize
-    const transcript = toSummarize.map(m => {
-      const role = m.role ?? 'unknown';
-      const content = typeof m.content === 'string'
-        ? m.content
-        : JSON.stringify(m.content);
-      return `[${role}]: ${content}`;
-    }).join('\n\n');
-
-    try {
-      const { text: summary } = await generateText({
-        model: this.model,
-        messages: [
-          {
-            role: 'system',
-            content: 'You are a conversation summarizer. Summarize the following conversation transcript concisely, preserving key facts, decisions, tool results, and context that would be needed to continue the conversation. Be factual and dense. Do not add commentary.',
-          },
-          {
-            role: 'user',
-            content: `Summarize this conversation transcript:\n\n${transcript}`,
-          },
-        ],
-        temperature: 0.3,
-      });
-
-      const summaryMessage: ModelMessage = {
-        role: 'assistant',
-        content: `[Conversation Summary — compacted ${COMPACT_RANGE} messages]\n\n${summary}`,
-      };
-
-      // Rebuild in-memory messages: summary + remaining
-      this.messages = [summaryMessage, ...remaining];
-
-      // Persist: clear DB and re-write all messages
-      await this.memory.history.clear();
-      await this.memory.history.pushMany(this.messages);
-
-      console.log(`  ✅ Compacted to ${this.messages.length} messages.`);
-    } catch (e) {
-      console.error('  ❌ Compaction failed, keeping original history:', e);
-    }
-  }
 
   private async processQueue() {
     if (this.processing || this.inputQueue.length === 0) return;
@@ -354,7 +294,7 @@ export class Agent {
       out.onAgentStart(label);
     }
 
-    await this.compactHistory();
+    this.messages = await this.memory.compactHistory("main-session", this.model);
 
     // Bootstrap: if bootstrapPrompt is set, run it instead of normal chat
     // until the required files (SOUL.md, IDENTITY.md, USER.md) are created
@@ -408,7 +348,7 @@ export class Agent {
         if (typeof msg.content !== "string") {
           msg.content = msg.content.filter((part) => part.type !== 'reasoning');
         }
-        await this.memory.history.push(msg);
+        await this.memory.history.push("main-session", msg);
       }
 
       for (const out of this.outputAdapters) {
@@ -416,7 +356,7 @@ export class Agent {
       }
 
       // Compact history if it's grown past the threshold
-      await this.compactHistory();
+      this.messages = await this.memory.compactHistory("main-session", this.model);
     } catch (error: any) {
       for (const out of this.outputAdapters) {
         out.onError(error);
