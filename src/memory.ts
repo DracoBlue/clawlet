@@ -103,7 +103,7 @@ export class AgentMemory {
       // Persist: clear DB and re-write all messages
       await this.history.replaceAll(name, compactedMessages);
 
-      logger.info({count: compactedMessages}, `  Compacted messages.`);
+      logger.info({count: compactedMessages.length}, `  Compacted messages.`);
       return compactedMessages;
     } catch (e) {
       logger.error({ err: e }, 'Compaction failed, keeping original history');

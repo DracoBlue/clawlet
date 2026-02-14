@@ -15,8 +15,8 @@ const localProvider = createOpenAICompatible({
 export const model : LanguageModel = process.env.AI_GATEWAY_MODEL_ID ? (AI_GATEWAY_USE_QWEN_MIDDLEWARE ? wrapLanguageModel({
   model: gateway(process.env.AI_GATEWAY_MODEL_ID),
   middleware: [
-    //hermesToolMiddleware,
-    xmlToolMiddleware,
+    hermesToolMiddleware,
+    //xmlToolMiddleware,
     addToolInputExamplesMiddleware({  prefix: 'Input Examples:', }),
     extractReasoningMiddleware({
       tagName: "think"
@@ -25,8 +25,8 @@ export const model : LanguageModel = process.env.AI_GATEWAY_MODEL_ID ? (AI_GATEW
 }) : process.env.AI_GATEWAY_MODEL_ID) : wrapLanguageModel({
   model: localProvider.languageModel(OPENAI_COMPATIBLE_MODEL_ID),
   middleware: [
-    //hermesToolMiddleware,
-    xmlToolMiddleware,
+    hermesToolMiddleware,
+    //xmlToolMiddleware,
     addToolInputExamplesMiddleware({  prefix: 'Input Examples:', }),
     extractReasoningMiddleware({
       tagName: "think"

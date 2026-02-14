@@ -189,7 +189,7 @@ const runTestCaseFile = async (filename: string) => {
       data.input,
       output
     );
-    expect(pass, `LLM judge failed:\n${reasoning}`).toBe(true);
+    expect(pass, `LLM judge failed:\n${reasoning} (eval: ${data.validate.llm_eval}, output: ${output})`).toBe(true);
   }
 }
 
