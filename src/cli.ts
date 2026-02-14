@@ -168,7 +168,7 @@ const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_USERINFO_ID = process.env.TELEGRAM_USERINFO_ID;
 
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout, prompt: '\nYou: ' });
-const agent = new Agent(new AgentMemory(), model);
+const agent = new Agent(await AgentMemory.create(), model);
 
 // Always add CLI adapters
 agent.addInput(new CliInput(rl));

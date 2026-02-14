@@ -4,6 +4,8 @@ import { generateText, type LanguageModel, type ModelMessage } from "ai";
 import path from "path";
 import { LibSqlKeyValueStorage, LibSqlListStorage } from "./storage.js";
 import { logger } from './logger.js';
+import memoryDriver from 'unstorage/drivers/memory';
+
 
 // --- COMPACTION CONFIG ---
 const COMPACT_THRESHOLD = 25;  // Trigger compaction when history reaches this many items
@@ -16,33 +18,37 @@ export class AgentMemory {
   // 2. History (libSQL - file:history.db)
   public history: LibSqlListStorage<ModelMessage>;
 
-  
-
-  // 4. Workspace (Unstorage - ./workspace)
+  // 3. Workspace (Unstorage - ./workspace)
   public workspace: Storage;
 
-  constructor() {
-    // A. Init Secrets DB
-    // In Production: process.env.SECRETS_DB_URL (libsql://...)
-    this.secrets = new LibSqlKeyValueStorage(
-      process.env.SECRETS_DB_URL || "file:secrets.db", 
-      process.env.SECRETS_AUTH_TOKEN
+  private constructor(secrets: LibSqlKeyValueStorage, history: LibSqlListStorage<ModelMessage>, workspace: Storage) {
+    this.secrets = secrets;
+    this.history = history;
+    this.workspace = workspace
+  }
+
+  static async createInMemory() {
+    return new AgentMemory(
+      await LibSqlKeyValueStorage.create(':memory:'),
+      await LibSqlListStorage.create<ModelMessage>(':memory:'),
+      createStorage({ driver: memoryDriver() })
     );
+  }
 
-    // B. Init History DB
-    // In Production: process.env.HISTORY_DB_URL (libsql://...)
-    this.history = new LibSqlListStorage<ModelMessage>(
-      process.env.HISTORY_DB_URL || "file:history.db",
-      process.env.HISTORY_AUTH_TOKEN
+  static async create() {
+    return new AgentMemory(
+      await LibSqlKeyValueStorage.create(
+        process.env.SECRETS_DB_URL || "file:secrets.db", 
+        process.env.SECRETS_AUTH_TOKEN
+      ),
+      await LibSqlListStorage.create<ModelMessage>(
+        process.env.HISTORY_DB_URL || "file:history.db",
+        process.env.HISTORY_AUTH_TOKEN
+      ),
+      createStorage({
+        driver: fsDriver({ base: path.join(process.cwd(), "workspace") })
+      })
     );
-
-    
-
-    // D. Init Workspace (Filesystem)
-    // Unstorage abstrahiert hier nur das "Wie", aber es bleibt lokal im Ordner.
-    this.workspace = createStorage({
-      driver: fsDriver({ base: path.join(process.cwd(), "workspace") })
-    });
   }
 
 

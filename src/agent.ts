@@ -1,6 +1,5 @@
 import {
   streamText,
-  generateText,
   stepCountIs,
   type ModelMessage,
   type LanguageModel,

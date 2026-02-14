@@ -3,24 +3,11 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import YAML from 'yaml';
-import { createStorage } from 'unstorage';
-import memoryDriver from 'unstorage/drivers/memory';
 import { generateText } from 'ai';
 import { Agent } from './agent.js';
 import { AgentMemory } from './memory.js';
-import { LibSqlKeyValueStorage, LibSqlListStorage } from './storage.js';
-import type { ModelMessage } from 'ai';
 import { model } from './llm.js';
 
-// --- MOCK SETUP ---
-class TestAgentMemory extends AgentMemory {
-  constructor() {
-    super();
-    this.workspace = createStorage({ driver: memoryDriver() });
-    this.secrets = new LibSqlKeyValueStorage(':memory:');
-    this.history = new LibSqlListStorage<ModelMessage>(':memory:');
-  }
-}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -94,7 +81,7 @@ describe('Agent Evals (LLM)', () => {
 
     it(`Eval: ${data.name} (${filename})`, async () => {
       // 1. SETUP
-      const memory = new TestAgentMemory();
+      const memory = await AgentMemory.createInMemory();
 
       // Seed workspace files
       if (data.setup?.files) {

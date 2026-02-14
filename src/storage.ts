@@ -5,10 +5,16 @@ export class LibSqlKeyValueStorage {
   private client: Client;
   private tableName: string;
 
-  constructor(url: string, authToken?: string, tableName = 'kv_store') {
-    this.tableName = tableName;
+
+  private constructor(url: string, authToken?: string, tableName = 'kv_store') {
     this.client = authToken ? createClient({ url, authToken }) : createClient({ url });
-    this.init();
+    this.tableName = tableName;
+  }
+
+  static async create<T>(url: string, authToken?: string, tableName = 'kv_store') {
+    const s = new LibSqlKeyValueStorage(url, authToken, tableName);
+    await s.init();
+    return s;
   }
 
   private async init() {
@@ -63,9 +69,14 @@ export class LibSqlListStorage<T = any> {
   private client: Client;
   private tableName = 'list_items';
 
-  constructor(url: string, authToken?: string) {
+  private constructor(url: string, authToken?: string) {
     this.client = authToken ? createClient({ url, authToken }) : createClient({ url });
-    this.init();
+  }
+
+  static async create<T>(url: string, authToken?: string) {
+    const s = new LibSqlListStorage(url, authToken);
+    await s.init();
+    return s;
   }
 
   private async init() {
@@ -87,18 +98,8 @@ export class LibSqlListStorage<T = any> {
   }
 
   async pushMany(name: string, items: T[]): Promise<void> {
-    const tx = await this.client.transaction();
-    try {
-        for (const item of items) {
-            await tx.execute({
-                sql: `INSERT INTO ${this.tableName} (name, item) VALUES (?, ?)`,
-                args: [name, JSON.stringify(item)]
-            });
-        }
-        await tx.commit();
-    } catch (e) {
-        await tx.rollback();
-        throw e;
+    for (const item of items) {
+      this.push(name, item);
     }
   }
 

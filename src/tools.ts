@@ -993,6 +993,7 @@ Return ONLY a JSON object mapping tool names to arrays of permission rules. Exam
           const responseMessages = (await result.response).messages;
 
           const messagesToSave: ModelMessage[] = [{ role: 'user', content: prompt }, ...responseMessages];
+
           await memory.history.pushMany(name, messagesToSave);
 
           await memory.compactHistory(name, model);
