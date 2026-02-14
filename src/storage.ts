@@ -7,7 +7,7 @@ export class LibSqlKeyValueStorage {
 
   constructor(url: string, authToken?: string, tableName = 'kv_store') {
     this.tableName = tableName;
-    this.client = createClient({ url, authToken });
+    this.client = authToken ? createClient({ url, authToken }) : createClient({ url });
     this.init();
   }
 
@@ -65,7 +65,7 @@ export class LibSqlListStorage<T = any> {
 
   constructor(url: string, authToken?: string, tableName = 'list_store') {
     this.tableName = tableName;
-    this.client = createClient({ url, authToken });
+    this.client = authToken ? createClient({ url, authToken }) : createClient({ url });
     this.init();
   }
 

@@ -68,6 +68,11 @@ export function createTools(memory: AgentMemory, model: LanguageModel) {
   return {
     now: tool({
       description: 'Get current time and date',
+      inputSchema: jsonSchema<{}>({
+        type: "object",
+        properties: {},
+        additionalProperties: false,
+      }),
       execute: async () => {
         return new Date().toISOString();
       }
@@ -75,7 +80,7 @@ export function createTools(memory: AgentMemory, model: LanguageModel) {
 
     'http.request': tool({
       description: 'Execute HTTP requests. Provide method (GET/POST/PUT/DELETE), url, optional headers object, and optional unescaped body string. Returns status, statusText and data.',
-      inputSchema: jsonSchema({
+      inputSchema: jsonSchema<{method?:string,url:string,headers?:Record<string,string>,body?:string,transformer?:string}>({
         type: 'object',
         properties: {
           method: { type: 'string', enum: ['GET', 'POST', 'PUT', 'DELETE'], description: 'HTTP method' },
@@ -86,7 +91,7 @@ export function createTools(memory: AgentMemory, model: LanguageModel) {
         },
         required: ['url'],
       }),
-      execute: async ({ method, url, headers, body, transformer }: { method?: string, url: string, headers?: Record<string, string>, body?: string, transformer?: string  }) => {
+      execute: async ({ method, url, headers, body, transformer }) => {
         const executeMethod = method ? method : 'GET';
         logger.debug({ method: executeMethod, url }, 'HTTP request');
         try {
@@ -114,7 +119,7 @@ export function createTools(memory: AgentMemory, model: LanguageModel) {
 
     'http.get': tool({
       description: 'Shortcut for GET requests. Provide url and optional headers.',
-      inputSchema: jsonSchema({
+      inputSchema: jsonSchema<{url: string, headers?: Record<string, string>, transformer?: string}>({
         type: 'object',
         properties: {
           url: { type: 'string', description: 'URL to request' },
@@ -123,7 +128,7 @@ export function createTools(memory: AgentMemory, model: LanguageModel) {
         },
         required: ['url'],
       }),
-      execute: async ({ url, headers, transformer }: { url: string, headers?: Record<string, string>, transformer?: string  }) => {
+      execute: async ({ url, headers, transformer }) => {
         logger.debug({ url }, 'HTTP GET');
         try {
           const res = await fetch(url, {
@@ -142,7 +147,7 @@ export function createTools(memory: AgentMemory, model: LanguageModel) {
 
     'http.post': tool({
       description: 'Shortcut for POST requests. Provide url, optional unescaped body string, and optional headers.',
-      inputSchema: jsonSchema({
+      inputSchema: jsonSchema<{url: string, body?: string, headers?: Record<string, string>, transformer?: string}>({
         type: 'object',
         properties: {
           url: { type: 'string', description: 'URL to request' },
@@ -152,7 +157,7 @@ export function createTools(memory: AgentMemory, model: LanguageModel) {
         },
         required: ['url'],
       }),
-      execute: async ({ url, body, headers, transformer }: { url: string, body?: string, headers?: Record<string, string>, transformer?: string }) => {
+      execute: async ({ url, body, headers, transformer }) => {
         logger.debug({ url }, 'HTTP POST');
         try {
           let parsedBody = body;
@@ -177,7 +182,7 @@ export function createTools(memory: AgentMemory, model: LanguageModel) {
 
     'http.download': tool({
       description: 'Download a file from a URL and save it to the workspace. Provide url and an optional filename (defaults to the last path segment of the URL).',
-      inputSchema: jsonSchema({
+      inputSchema: jsonSchema<{ url: string, filename?: string }>({
         type: 'object',
         properties: {
           url: { type: 'string', description: 'URL to download from' },
@@ -185,7 +190,7 @@ export function createTools(memory: AgentMemory, model: LanguageModel) {
         },
         required: ['url'],
       }),
-      execute: async ({ url, filename }: { url: string, filename?: string }) => {
+      execute: async ({ url, filename }) => {
         const name = filename || url.split('/').pop() || 'download';
         logger.debug({ url, filename: name }, 'HTTP download');
         try {
@@ -215,7 +220,7 @@ export function createTools(memory: AgentMemory, model: LanguageModel) {
 
     'kv.set': tool({
       description: 'Store a key-value pair (e.g. API keys, config). Provide "key" and "value".',
-      inputSchema: jsonSchema({
+      inputSchema: jsonSchema<{ key: string, value: string }>({
         type: 'object',
         properties: {
           key: { type: 'string', description: 'The key to store' },
@@ -223,7 +228,7 @@ export function createTools(memory: AgentMemory, model: LanguageModel) {
         },
         required: ['key', 'value'],
       }),
-      execute: async ({ key, value }: { key: string, value: string }) => {
+      execute: async ({ key, value }) => {
         logger.debug({ key }, 'KV set');
         try {
           await memory.secrets.set(key, value);
@@ -234,14 +239,14 @@ export function createTools(memory: AgentMemory, model: LanguageModel) {
 
     'kv.get': tool({
       description: 'Retrieve a value by key from the key-value store.',
-      inputSchema: jsonSchema({
+      inputSchema: jsonSchema<{ key: string }>({
         type: 'object',
         properties: {
           key: { type: 'string', description: 'The key to retrieve' },
         },
         required: ['key'],
       }),
-      execute: async ({ key }: { key: string }) => {
+      execute: async ({ key }) => {
         logger.debug({ key }, 'KV get');
         try {
           const result = await memory.secrets.get(key);
@@ -252,6 +257,11 @@ export function createTools(memory: AgentMemory, model: LanguageModel) {
 
     'kv.list': tool({
       description: 'List all keys in the key-value store.',
+      inputSchema: jsonSchema<{}>({
+        type: 'object',
+        properties: {},
+        additionalProperties: false,
+      }),
       execute: async () => {
         logger.debug('KV list');
         try {
@@ -263,14 +273,14 @@ export function createTools(memory: AgentMemory, model: LanguageModel) {
 
     'kv.delete': tool({
       description: 'Delete a key from the key-value store.',
-      inputSchema: jsonSchema({
+      inputSchema: jsonSchema<{ key: string }>({
         type: 'object',
         properties: {
           key: { type: 'string', description: 'The key to delete' },
         },
         required: ['key'],
       }),
-      execute: async ({ key }: { key: string }) => {
+      execute: async ({ key }) => {
         logger.debug({ key }, 'KV delete');
         try {
           await memory.secrets.delete(key);
@@ -281,14 +291,14 @@ export function createTools(memory: AgentMemory, model: LanguageModel) {
 
     'kv.has': tool({
       description: 'Check if a key exists in the key-value store. Returns true or false.',
-      inputSchema: jsonSchema({
+      inputSchema: jsonSchema<{ key: string }>({
         type: 'object',
         properties: {
           key: { type: 'string', description: 'The key to check' },
         },
         required: ['key'],
       }),
-      execute: async ({ key }: { key: string }) => {
+      execute: async ({ key }) => {
         logger.debug({ key }, 'KV has');
         try {
           const exists = await memory.secrets.has(key);
@@ -299,6 +309,11 @@ export function createTools(memory: AgentMemory, model: LanguageModel) {
 
     'fs.listDir': tool({
       description: 'List all files in the workspace (including memory logs and skills).',
+      inputSchema: jsonSchema<{}>({
+        type: 'object',
+        properties: {},
+        additionalProperties: false,
+      }),
       execute: async () => {
         logger.debug('FS listDir');
         try {
@@ -310,14 +325,14 @@ export function createTools(memory: AgentMemory, model: LanguageModel) {
 
     'fs.readFile': tool({
       description: 'Read a file from the workspace. "path" must be one of the keys from fs.listDir (e.g. "memory:2026-02-08.md").',
-      inputSchema: jsonSchema({
+      inputSchema: jsonSchema<{ path: string }>({
         type: 'object',
         properties: {
           path: { type: 'string', description: 'Path/key of the file to read' },
         },
         required: ['path'],
       }),
-      execute: async ({ path }: { path: string }) => {
+      execute: async ({ path }) => {
         logger.debug({ path }, 'FS readFile');
         try {
           const content = await memory.workspace.getItem(path);
@@ -329,7 +344,7 @@ export function createTools(memory: AgentMemory, model: LanguageModel) {
 
     'fs.writeFile': tool({
       description: 'Write or update a file in the workspace. "path" is the key/path (e.g. "memory:2026-02-08.md"), "content" is the full content.',
-      inputSchema: jsonSchema({
+      inputSchema: jsonSchema<{ path: string, content: string }>({
         type: 'object',
         properties: {
           path: { type: 'string', description: 'Path/key of the file to write' },
@@ -337,7 +352,7 @@ export function createTools(memory: AgentMemory, model: LanguageModel) {
         },
         required: ['path', 'content'],
       }),
-      execute: async ({ path, content }: { path: string, content: string }) => {
+      execute: async ({ path, content }) => {
         logger.debug({ path }, 'FS writeFile');
         try {
           await memory.workspace.setItem(path, content);
@@ -348,7 +363,7 @@ export function createTools(memory: AgentMemory, model: LanguageModel) {
 
     'fs.edit': tool({
       description: 'Smart edit: Replaces a specific string in a file with a new string. Use this for small, targeted changes instead of rewriting the whole file. The "find" text must be an exact, unique match.',
-      inputSchema: jsonSchema({
+      inputSchema: jsonSchema<{ path: string, find: string, replace: string }>({
         type: 'object',
         properties: {
           path: { type: 'string', description: 'Path/key of the file to edit' },
@@ -357,7 +372,7 @@ export function createTools(memory: AgentMemory, model: LanguageModel) {
         },
         required: ['path', 'find', 'replace'],
       }),
-      execute: async ({ path, find, replace }: { path: string, find: string, replace: string }) => {
+      execute: async ({ path, find, replace }) => {
         logger.debug({ path }, 'FS edit');
         try {
           const content = await memory.workspace.getItem(path);
@@ -382,14 +397,14 @@ export function createTools(memory: AgentMemory, model: LanguageModel) {
 
     'fs.delete': tool({
       description: 'Delete a file. If the file is outside .trash/, it is moved to .trash/ (soft delete). If the file is already inside .trash/, it is permanently removed.',
-      inputSchema: jsonSchema({
+      inputSchema: jsonSchema<{ path: string }>({
         type: 'object',
         properties: {
           path: { type: 'string', description: 'Path/key of the file to delete' },
         },
         required: ['path'],
       }),
-      execute: async ({ path }: { path: string }) => {
+      execute: async ({ path }) => {
         try {
           const content = await memory.workspace.getItem(path);
           if (content === null || content === undefined) return "File not found.";
@@ -413,7 +428,7 @@ export function createTools(memory: AgentMemory, model: LanguageModel) {
 
     'fs.move': tool({
       description: 'Move/rename a file in the workspace. Reads from "from", writes to "to", then removes the original.',
-      inputSchema: jsonSchema({
+      inputSchema: jsonSchema<{ from: string, to: string }>({
         type: 'object',
         properties: {
           from: { type: 'string', description: 'Source path/key' },
@@ -421,7 +436,7 @@ export function createTools(memory: AgentMemory, model: LanguageModel) {
         },
         required: ['from', 'to'],
       }),
-      execute: async ({ from, to }: { from: string, to: string }) => {
+      execute: async ({ from, to }) => {
         logger.debug({ from, to }, 'FS move');
         try {
           const content = await memory.workspace.getItem(from);
@@ -435,14 +450,14 @@ export function createTools(memory: AgentMemory, model: LanguageModel) {
 
     'fs.exists': tool({
       description: 'Check if a file exists in the workspace. Returns true or false.',
-      inputSchema: jsonSchema({
+      inputSchema: jsonSchema<{ path: string }>({
         type: 'object',
         properties: {
           path: { type: 'string', description: 'Path/key of the file to check' },
         },
         required: ['path'],
       }),
-      execute: async ({ path }: { path: string }) => {
+      execute: async ({ path }) => {
         logger.debug({ path }, 'FS exists');
         try {
           const exists = await memory.workspace.hasItem(path);
@@ -453,14 +468,14 @@ export function createTools(memory: AgentMemory, model: LanguageModel) {
 
     'fs.stat': tool({
       description: 'Get metadata about a file in the workspace (e.g. mtime, size). Returns JSON with available metadata.',
-      inputSchema: jsonSchema({
+      inputSchema: jsonSchema<{ path: string }>({
         type: 'object',
         properties: {
           path: { type: 'string', description: 'Path/key of the file' },
         },
         required: ['path'],
       }),
-      execute: async ({ path }: { path: string }) => {
+      execute: async ({ path }) => {
         logger.debug({ path }, 'FS stat');
         try {
           const exists = await memory.workspace.hasItem(path);
@@ -473,7 +488,7 @@ export function createTools(memory: AgentMemory, model: LanguageModel) {
 
     'skill.install': tool({
       description: 'Install a skill from a remote URL. Downloads SKILL.md, parses it for additional files to download, analyzes required tool permissions, and saves everything to workspace under skills/<name>/.',
-      inputSchema: jsonSchema({
+      inputSchema: jsonSchema<{ name: string; url: string }>({
         type: 'object',
         properties: {
           name: { type: 'string', description: 'Skill name (e.g. "moltbook", "tavily"). Used as the folder name under skills/.' },
@@ -481,7 +496,7 @@ export function createTools(memory: AgentMemory, model: LanguageModel) {
         },
         required: ['name', 'url'],
       }),
-      execute: async ({ name, url }: { name: string; url: string }) => {
+      execute: async ({ name, url }) => {
         logger.info({ skill: name, url }, 'SKILL installing');
 
         // Phase 0: Validate name
@@ -621,6 +636,11 @@ Return ONLY a JSON object mapping tool names to arrays of permission rules. Exam
 
     'connection.list': tool({
       description: 'List all available connections (configured API credentials). Returns comma-separated connection names.',
+      inputSchema: jsonSchema<{}>({
+        type: 'object',
+        properties: {},
+        additionalProperties: false,
+      }),
       execute: async () => {
         logger.debug('CONN list');
         try {
@@ -633,7 +653,7 @@ Return ONLY a JSON object mapping tool names to arrays of permission rules. Exam
 
     'connection.request': tool({
       description: 'Execute an authenticated HTTP request using a named connection. The connection\'s Bearer token is automatically injected into the Authorization header. If the connection does not exist, returns an error prompting you to create it first with connection.create.',
-      inputSchema: jsonSchema({
+      inputSchema: jsonSchema<{ name: string; url: string; method?: string; headers?: Record<string, string>; body?: string }>({
         type: 'object',
         properties: {
           name: { type: 'string', description: 'Connection name (e.g. "petstore", "moltbook")' },
@@ -644,7 +664,7 @@ Return ONLY a JSON object mapping tool names to arrays of permission rules. Exam
         },
         required: ['name', 'url'],
       }),
-      execute: async ({ name, url, method, headers, body }: { name: string; url: string; method?: string; headers?: Record<string, string>; body?: string }) => {
+      execute: async ({ name, url, method, headers, body }) => {
         logger.debug({ name, method: method || 'GET', url }, 'CONN request');
         const settings = await readSettings();
         const conn = settings.connections[name];
@@ -685,7 +705,7 @@ Return ONLY a JSON object mapping tool names to arrays of permission rules. Exam
 
     'connection.create': tool({
       description: 'Create a new connection by calling a registration endpoint. Sends the request, extracts the API key from the response, and stores the connection in settings.json. The "type" must be "Bearer". The response should contain the API key and optionally a refresh token/URL.',
-      inputSchema: jsonSchema({
+      inputSchema: jsonSchema<{name:string, url:string, method?:string, headers?:Record<string,string>, body?:string, type:string, tokenPath?:string, refreshTokenPath?:string, refreshUrl?:string}>({
         type: 'object',
         properties: {
           name: { type: 'string', description: 'Connection name (e.g. "moltbook", "petstore")' },
@@ -787,7 +807,7 @@ Return ONLY a JSON object mapping tool names to arrays of permission rules. Exam
 
     'skill.prompt': tool({
       description: 'Chat with an installed skill in a sandboxed environment. The skill runs with its own message history and only the tools allowed by permissions.json (entries with "allowed": true).',
-      inputSchema: jsonSchema({
+      inputSchema: jsonSchema<{ name: string; prompt: string }>({
         type: 'object',
         properties: {
           name: { type: 'string', description: 'Skill name (must be installed via skill.install).' },
@@ -795,7 +815,7 @@ Return ONLY a JSON object mapping tool names to arrays of permission rules. Exam
         },
         required: ['name', 'prompt'],
       }),
-      execute: async ({ name, prompt }: { name: string; prompt: string }) => {
+      execute: async ({ name, prompt }) => {
         logger.info({ skill: name }, 'SKILL.PROMPT starting chat');
 
         // 1. Validate name
@@ -821,7 +841,7 @@ Return ONLY a JSON object mapping tool names to arrays of permission rules. Exam
         }
 
         // 4. Build sandboxed tools (only tools with "allowed": true, HTTP tools get URL guards)
-        const allTools = createTools(memory);
+        const allTools = createTools(memory, model);
         const sandboxed = createSandboxedTools(allTools, skillPermissions);
 
         if (Object.keys(sandboxed).length === 0) {
@@ -871,9 +891,6 @@ Return ONLY a JSON object mapping tool names to arrays of permission rules. Exam
 
           await memory.skillHistory.push(name, { role: 'user', content: prompt });
           for (const msg of responseMessages) {
-            if (typeof msg.content !== "string") {
-              msg.content = msg.content.filter((part) => part.type !== 'reasoning');
-            }
             await memory.skillHistory.push(name, msg);
           }
 
