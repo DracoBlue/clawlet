@@ -289,86 +289,86 @@ export class Agent {
     if (!this.initialized) await this.init();
     this.processing = true;
 
-    const queuedItem = await this.memory.queue.pop("main-session");
-    if (!queuedItem) {
-        this.processing = false;
-        return;
-    }
-    const { text, label } = queuedItem;
-
-    for (const out of this.outputAdapters) {
-      out.onAgentStart(label);
-    }
-
-    this.messages = await this.memory.compactHistory("main-session", this.model);
-
-    // Bootstrap: if bootstrapPrompt is set, run it instead of normal chat
-    // until the required files (SOUL.md, IDENTITY.md, USER.md) are created
-    const isFirstMessage = this.messages.length === 0;
-    let input: string;
-    if (this.bootstrapPrompt && isFirstMessage) {
-      input = `[BOOTSTRAP MODE] The workspace is not yet set up.\n\n` +
-        `${this.bootstrapPrompt}\n\n` +
-        `Use fs.writeFile to create each file in the workspace when the user provides the information.\n\n` +
-        `--- USER MESSAGE ---\n${text}`;
-    } else if (this.bootstrapPrompt) {
-      // Still in bootstrap mode (subsequent messages) — check if bootstrap is complete
-      const workspaceDir = path.join(process.cwd(), 'workspace');
-      const requiredFiles = ['SOUL.md', 'IDENTITY.md', 'USER.md'];
-      let allExist = true;
-      for (const file of requiredFiles) {
-        try {
-          await access(path.join(workspaceDir, file));
-        } catch {
-          allExist = false;
-          break;
-        }
+    while (true) {
+      const queuedItem = await this.memory.queue.pop("main-session");
+      if (!queuedItem) {
+          this.processing = false;
+          return;
       }
-      if (allExist) {
-        this.bootstrapPrompt = null;
-        console.log(`  ✅ Bootstrap complete! SOUL.md, IDENTITY.md, and USER.md are now present.`);
-      }
-      input = text;
-    } else if (isFirstMessage) {
-      input = `[SYSTEM BOOT] This is a fresh session. Before responding to the user, you MUST execute the "Every Session" protocol from AGENTS.md NOW using your tools:\n` +
-        `1. Call fs.readFile for SOUL.md\n` +
-        `2. Call fs.readFile for USER.md\n` +
-        `3. Call fs.readFile for memory:${getTodayString()}.md (create it with fs.writeFile if it doesn't exist)\n` +
-        `4. Call fs.readFile for MEMORY.md\n` +
-        `Execute ALL of these tool calls first, then respond to the user's message below.\n\n` +
-        `--- USER MESSAGE ---\n${text}`;
-    } else {
-      input = text;
-    }
-
-    let fullResponse = "";
-    try {
-      const newMessages = await runAgent(input, this.memory, this.model, this.messages, this.tools, (chunk) => {
-      fullResponse += chunk;
-        for (const out of this.outputAdapters) {
-          out.onResponseChunk(chunk);
-        }
-      });
-
-      for (const msg of newMessages) {
-        if (typeof msg.content !== "string") {
-          msg.content = msg.content.filter((part) => part.type !== 'reasoning');
-        }
-        await this.memory.history.push("main-session", msg);
-      }
+      const { text, label } = queuedItem;
 
       for (const out of this.outputAdapters) {
-        out.onResponseEnd(fullResponse);
+        out.onAgentStart(label);
       }
 
-      // Compact history if it's grown past the threshold
       this.messages = await this.memory.compactHistory("main-session", this.model);
-    } catch (error: any) {
-      for (const out of this.outputAdapters) {
-        out.onError(error);
+
+      // Bootstrap: if bootstrapPrompt is set, run it instead of normal chat
+      // until the required files (SOUL.md, IDENTITY.md, USER.md) are created
+      const isFirstMessage = this.messages.length === 0;
+      let input: string;
+      if (this.bootstrapPrompt && isFirstMessage) {
+        input = `[BOOTSTRAP MODE] The workspace is not yet set up.\n\n` +
+          `${this.bootstrapPrompt}\n\n` +
+          `Use fs.writeFile to create each file in the workspace when the user provides the information.\n\n` +
+          `--- USER MESSAGE ---\n${text}`;
+      } else if (this.bootstrapPrompt) {
+        // Still in bootstrap mode (subsequent messages) — check if bootstrap is complete
+        const workspaceDir = path.join(process.cwd(), 'workspace');
+        const requiredFiles = ['SOUL.md', 'IDENTITY.md', 'USER.md'];
+        let allExist = true;
+        for (const file of requiredFiles) {
+          try {
+            await access(path.join(workspaceDir, file));
+          } catch {
+            allExist = false;
+            break;
+          }
+        }
+        if (allExist) {
+          this.bootstrapPrompt = null;
+          console.log(`  ✅ Bootstrap complete! SOUL.md, IDENTITY.md, and USER.md are now present.`);
+        }
+        input = text;
+      } else if (isFirstMessage) {
+        input = `[SYSTEM BOOT] This is a fresh session. Before responding to the user, you MUST execute the "Every Session" protocol from AGENTS.md NOW using your tools:\n` +
+          `1. Call fs.readFile for SOUL.md\n` +
+          `2. Call fs.readFile for USER.md\n` +
+          `3. Call fs.readFile for memory:${getTodayString()}.md (create it with fs.writeFile if it doesn't exist)\n` +
+          `4. Call fs.readFile for MEMORY.md\n` +
+          `Execute ALL of these tool calls first, then respond to the user's message below.\n\n` +
+          `--- USER MESSAGE ---\n${text}`;
+      } else {
+        input = text;
+      }
+
+      let fullResponse = "";
+      try {
+        const newMessages = await runAgent(input, this.memory, this.model, this.messages, this.tools, (chunk) => {
+        fullResponse += chunk;
+          for (const out of this.outputAdapters) {
+            out.onResponseChunk(chunk);
+          }
+        });
+
+        for (const msg of newMessages) {
+          if (typeof msg.content !== "string") {
+            msg.content = msg.content.filter((part) => part.type !== 'reasoning');
+          }
+          await this.memory.history.push("main-session", msg);
+        }
+
+        for (const out of this.outputAdapters) {
+          out.onResponseEnd(fullResponse);
+        }
+
+        // Compact history if it's grown past the threshold
+        this.messages = await this.memory.compactHistory("main-session", this.model);
+      } catch (error: any) {
+        for (const out of this.outputAdapters) {
+          out.onError(error);
+        }
       }
     }
-
-    this.processing = false;
   }
 }
