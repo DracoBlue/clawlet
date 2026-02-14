@@ -15,9 +15,7 @@ export const model : LanguageModel = process.env.AI_GATEWAY_MODEL_ID ? process.e
   model: localProvider.languageModel(OPENAI_COMPATIBLE_MODEL_ID),
   middleware: [
     hermesToolMiddleware,
-    addToolInputExamplesMiddleware({
-      prefix: 'Input Examples:',
-    }),
+    addToolInputExamplesMiddleware({  prefix: 'Input Examples:', }),
     extractReasoningMiddleware({
       tagName: "think"
     })

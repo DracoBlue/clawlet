@@ -68,7 +68,7 @@ function getTodayString(): string {
 
 
 // --- SKILL SYSTEM PROMPT ---
-async function buildSkillSystemPrompt(name: string, memory: AgentMemory, skillPermissions: Record<string, Array<Record<string, string>>>, model: LanguageModel): Promise<string> {
+async function buildSkillSystemPrompt(name: string, memory: AgentMemory, skillPermissions: Record<string, Array<Record<string, string>>>): Promise<string> {
   // Read SOUL.md from workspace (if it exists)
   let soulDoc = "";
   try {
@@ -128,8 +128,7 @@ You are "Clawlet", an autonomous agent defined by the file \`AGENTS.md\`.`;
 ${identitySection}
 
 # PRIME DIRECTIVE
-This is your main session. Your core behavior, ethics, and operational protocols are strictly defined in **AGENTS.md** below.
-You must obey these rules above all else.
+This is a specific skill session. You must obey these rules above all else.
 
 # OPERATIONAL PROTOCOL (The "Every Session" Loop)
 1. **INITIALIZE**:
@@ -144,7 +143,7 @@ You must obey these rules above all else.
    - Use \`connection.request\` for authenticated API calls (Bearer token is auto-injected).
 
 3. **EXECUTION**:
-   - Use \`fs.readFile\` and \`fs.writeFile\` to log *significant* events to append oday's memory file (as per AGENTS.md rules).
+   - Use \`fs.readFile\` and \`fs.writeFile\` to log *significant* events to append oday's memory file.
    - **Text > Brain**: If you learn something, write it down immediately.
 
 # AVAILABLE PERMISSIONS (Permissions)
@@ -932,6 +931,21 @@ Return ONLY a JSON object mapping tool names to arrays of permission rules. Exam
         } catch {
           return JSON.stringify({ error: `No permissions found for skill "${name}". Ask user to install skill with skill.install tool first.` });
         }
+
+        skillPermissions['fs.writeFile'] = skillPermissions['fs.writeFile'] || [
+          {
+            path: "memory/*",
+            allowed: "1"
+          }
+        ];
+
+        skillPermissions['fs.readFile'] = skillPermissions['fs.readFile'] || [
+          {
+            path: "memory/*",
+            allowed: "1"
+          }
+        ]
+
 
         // 4. Build sandboxed tools (only tools with "allowed": true, HTTP tools get URL guards)
         const allTools = createTools(memory, model);

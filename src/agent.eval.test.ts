@@ -19,7 +19,6 @@ class TestAgentMemory extends AgentMemory {
     this.workspace = createStorage({ driver: memoryDriver() });
     this.secrets = new LibSqlKeyValueStorage(':memory:');
     this.history = new LibSqlListStorage<ModelMessage>(':memory:');
-    
   }
 }
 
