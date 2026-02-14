@@ -1,16 +1,16 @@
 name: "Network: Download File"
 description: "Tests the http.download tool."
 
-timeout: 180000
+timeout: 20000
 
 setup:
   files: {}
 
-input: "Download the robots.txt from google.com and save it as 'google_robots.txt'."
+input: "Download the robots.txt from https://httpbin.org/robots.txt and save it as 'httpbin_robots.txt'."
 
 validate:
   files:
-    google_robots.txt:
-      contains_any: ["User-agent", "Disallow"]
+    httpbin_robots.txt:
+      contains_any: ["User-agent", "/deny"]
   response:
-    contains_any: ["downloaded", "saved", "google_robots.txt"]
+    contains_any: ["downloaded", "saved", "httpbin_robots.txt"]
