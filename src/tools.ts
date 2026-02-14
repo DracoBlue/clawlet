@@ -143,7 +143,7 @@ This is a specific skill session. You must obey these rules above all else.
    - Use \`connection.request\` for authenticated API calls (Bearer token is auto-injected).
 
 3. **EXECUTION**:
-   - Use \`fs.readFile\` and \`fs.writeFile\` to log *significant* events to append oday's memory file.
+   - Use \`fs.readFile\` and \`fs.writeFile\` to log *significant* events to append today's memory file.
    - Make sure to use valid JSON when generating tool_call xml tags.
    - **Text > Brain**: If you learn something, write it down immediately.
 
@@ -454,7 +454,7 @@ export function createTools(memory: AgentMemory, model: LanguageModel) {
       }
     }),
 
-    'fs.edit': tool({
+    'fs.editFile': tool({
       description: 'Smart edit: Replaces a specific string in a file with a new string. Use this for small, targeted changes instead of rewriting the whole file. The "find" text must be an exact, unique match.',
       inputSchema: jsonSchema<{ path: string, find: string, replace: string }>({
         type: 'object',
@@ -466,7 +466,7 @@ export function createTools(memory: AgentMemory, model: LanguageModel) {
         required: ['path', 'find', 'replace'],
       }),
       execute: async ({ path, find, replace }) => {
-        logger.debug({ path }, 'FS edit');
+        logger.debug({ path }, 'FS editFile');
         try {
           const content = await memory.workspace.getItem(path);
           if (content === null || content === undefined) return `Error: File "${path}" not found.`;

@@ -104,7 +104,7 @@ You must obey these rules above all else.
    - Use \`connection.request\` for authenticated API calls (Bearer token is auto-injected).
 
 3. **EXECUTION**:
-   - Use \`fs.readFile\` and \`fs.writeFile\` to log *significant* events to append oday's memory file (as per AGENTS.md rules).
+   - Use \`fs.readFile\` and \`fs.writeFile\` to log *significant* events to append today's memory file (as per AGENTS.md rules).
    - Make sure to use valid JSON when generating tool_call xml tags.
    - **Text > Brain**: If you learn something, write it down immediately.
 
