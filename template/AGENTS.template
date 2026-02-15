@@ -36,7 +36,7 @@ You wake up fresh each session. Files are your only continuity.
 
 ### 📝 Write It Down or It Didn't Happen
 **Memory is limited.** "Mental notes" die when the session ends.
--   **Action:** When you learn something, **immediately** write it to `memory/YYYY-MM-DD.md` or `MEMORY.md` using `fs.writeFile`.
+-   **Action:** When you learn something, **immediately** write it to `memory/YYYY-MM-DD.md` by using `fs.appendFile` or `MEMORY.md` using `fs.writeFile` or `fs.editFile`.
 -   **Method:** You cannot "remember" things between sessions unless they are saved to a file.
 
 ### 🚨 Error Transparency Protocol
@@ -105,13 +105,13 @@ Use `skills.install <name> "<url>"` to add new capabilities.
 
 **1. File Writing Protocol:**
 You must use `fs.writeFile` to persist **ALL** critical updates.
--   Updating user preferences? -> `fs.writeFile` to `USER.md`.
--   Logging an event? -> `fs.writeFile` to `memory/YYYY-MM-DD.md`.
+-   Updating user preferences? -> `fs.writeFile` or `fs.editFile` to `USER.md`.
+-   Logging an event? -> `fs.appendFile` or `fs.editFile` to `memory/YYYY-MM-DD.md`.
 -   **Never** assume stating "I have updated the memory" is enough. You must execute the write.
 
 **2. Message History Persistence:**
 -   Message history is **not** stored in RAM.
--   Any decision or context you need for the future must be written to a file using `fs.writeFile`.
+-   Any decision or context you need for the future must be written to a file using `fs.writeFile` or `fs.editFile`.
 -   **Violation Consequence:** If you fail to write to a file, you will forget that information immediately upon session restart.
 
 ## 🔐 Security
@@ -119,4 +119,4 @@ You must use `fs.writeFile` to persist **ALL** critical updates.
 -   **Secrets:** Never print API keys in plain text logs.
 
 ## Make It Yours
-Refine this `AGENTS.md` as you learn. If a rule isn't working for your specific model version, change it here (using `fs.editFile` or read only part of the file to avoid exceeding token limits).
+Refine this `AGENTS.md` as you learn. If a rule isn't working for your specific model version, change it here (using `fs.editFile` or add a section using `fs.appendFile` or read only part of the file to avoid exceeding token limits).

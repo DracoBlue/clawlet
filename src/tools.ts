@@ -485,6 +485,27 @@ export function createTools(memory: AgentMemory, model: LanguageModel) {
       }
     }),
 
+    'fs.appendFile': tool({
+      description: 'Apped specific string to a file (will create it if it does not exist yet). Use this for appending something to daily memory files and the likes.',
+      inputSchema: jsonSchema<{ path: string, find: string, replace: string }>({
+        type: 'object',
+        properties: {
+          path: { type: 'string', description: 'Path/key of the file to edit' },
+          content: { type: 'string', description: 'The new text to append to the file.' },
+        },
+        required: ['path', 'content'],
+      }),
+      execute: async ({ path, find, replace }) => {
+        logger.debug({ path }, 'FS appendFile');
+        try {
+          const content = await memory.workspace.getItem(path);
+          const fileText = String(content || '');
+          await memory.workspace.setItem(path, (fileText != '' ? (fileText + "\n") : '') + content);
+          return `Success: Appended "${path}".`;
+        } catch (e: any) { return "Error appending file: " + e.message; }
+      }
+    }),
+
     'fs.delete': tool({
       description: 'Delete a file. If the file is outside .trash/, it is moved to .trash/ (soft delete). If the file is already inside .trash/, it is permanently removed.',
       inputSchema: jsonSchema<{ path: string }>({
@@ -931,6 +952,20 @@ Return ONLY a JSON object mapping tool names to arrays of permission rules. Exam
         }
 
         skillPermissions['fs.writeFile'] = skillPermissions['fs.writeFile'] || [
+          {
+            path: "memory/*",
+            allowed: "1"
+          }
+        ];
+
+        skillPermissions['fs.appendFile'] = skillPermissions['fs.appendFile'] || [
+          {
+            path: "memory/*",
+            allowed: "1"
+          }
+        ];
+
+        skillPermissions['fs.editFile'] = skillPermissions['fs.editFile'] || [
           {
             path: "memory/*",
             allowed: "1"
