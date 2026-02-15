@@ -1,6 +1,6 @@
 {
   "name": "clawlet",
-  "version": "0.5.2",
+  "version": "0.6.0",
   "description": "A lightweight AI based personal assistant.",
   "main": "src/cli.ts",
   "type": "module",

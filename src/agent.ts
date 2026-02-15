@@ -16,9 +16,6 @@ import { createTools } from './tools.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const PACKAGE_ROOT = path.resolve(__dirname, '..');
-const GENERATE_TEXT_TEMPERATURE = 0.6;
-const GENERATE_TEXT_TOP_P = 0.95;
-const GENERATE_TEXT_MAX_OUTPUT_TOKENS = 16384;
 const GENERATE_TEXT_MAX_STEPS = 30;
 
 // --- ADAPTER INTERFACES ---
@@ -138,9 +135,6 @@ async function runAgent(
       system: await buildSystemPrompt(memory),
       messages,
       tools,
-      temperature: GENERATE_TEXT_TEMPERATURE,
-      topP: GENERATE_TEXT_TOP_P,
-      maxOutputTokens: GENERATE_TEXT_MAX_OUTPUT_TOKENS,
       stopWhen: stepCountIs(GENERATE_TEXT_MAX_STEPS),
 
       onStepFinish: (step) => {

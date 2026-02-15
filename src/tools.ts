@@ -14,9 +14,6 @@ import TurndownService from 'turndown';
 import { logger } from './logger.js';
 
 // Resolve the package root directory (where template/ lives), independent of cwd
-const GENERATE_TEXT_TEMPERATURE = 0.6;
-const GENERATE_TEXT_TOP_P = 0.95;
-const GENERATE_TEXT_MAX_OUTPUT_TOKENS = 16384;
 const GENERATE_TEXT_MAX_STEPS = 30;
 
 const turndownService = new TurndownService()
@@ -972,9 +969,6 @@ Return ONLY a JSON object mapping tool names to arrays of permission rules. Exam
             system: await buildSkillSystemPrompt(name, memory, skillPermissions),
             messages,
             tools: Object.keys(sandboxed).length > 0 ? sandboxed : {},
-            temperature: GENERATE_TEXT_TEMPERATURE,
-            topP: GENERATE_TEXT_TOP_P,
-            maxOutputTokens: GENERATE_TEXT_MAX_OUTPUT_TOKENS,
             stopWhen: stepCountIs(GENERATE_TEXT_MAX_STEPS),
             onStepFinish: (step) => {
               if (step.toolCalls.length > 0) {
