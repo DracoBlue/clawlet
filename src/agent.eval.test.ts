@@ -217,6 +217,7 @@ describe('Agent Evals (LLM)', () => {
   it(`reasoning_multi_step`, async () => runTestCaseFile('reasoning_multi_step.yaml'), EVAL_TIMEOUT);
   it(`refactoring_edit`, async () => runTestCaseFile('refactoring_edit.yaml'), EVAL_TIMEOUT);
   it(`skill_sandbox_execution`, async () => runTestCaseFile('skill_sandbox_execution.yaml'), EVAL_TIMEOUT);
+  it(`rewrite_agents_md`, async () => runTestCaseFile('rewrite_agents_md.yaml'), EVAL_TIMEOUT);
   it(`skill_system_installation`, async () => runTestCaseFile('skill_system_installation.yaml'), EVAL_TIMEOUT);
   it(`soft_delete`, async () => runTestCaseFile('soft_delete.yaml'), EVAL_TIMEOUT);
   it(`stat_check`, async () => runTestCaseFile('stat_check.yaml'), EVAL_TIMEOUT);
