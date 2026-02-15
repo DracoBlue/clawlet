@@ -104,23 +104,8 @@ export class LibSqlListStorage<T = any> {
   }
 
   async replaceAll(name: string, items: T[]): Promise<void> {
-    const tx = await this.client.transaction();
-    try {
-        await tx.execute({
-            sql: `DELETE FROM ${this.tableName} WHERE name = ?`,
-            args: [name],
-        });
-        for (const item of items) {
-            await tx.execute({
-                sql: `INSERT INTO ${this.tableName} (name, item) VALUES (?, ?)`,
-                args: [name, JSON.stringify(item)]
-            });
-        }
-        await tx.commit();
-    } catch (e) {
-        await tx.rollback();
-        throw e;
-    }
+    this.clear(name);
+    this.pushMany(name, items);
   }
 
   async getAll(name: string): Promise<T[]> {
@@ -181,19 +166,9 @@ export class LibSqlFiFoStorage<T> {
     }
 
     public async pushMany(queue: string, items: T[]): Promise<void> {
-        const tx = await this.client.transaction();
-        try {
-            for (const item of items) {
-                await tx.execute({
-                    sql: `INSERT INTO ${this.tableName} (queue_name, value) VALUES (?, ?)`,
-                    args: [queue, JSON.stringify(item)],
-                });
-            }
-            await tx.commit();
-        } catch (e) {
-            await tx.rollback();
-            throw e;
-        }
+      for (const item of items) {
+        this.push(queue, item);
+      }
     }
 
     public async empty(queue: string): Promise<boolean> {
@@ -201,33 +176,24 @@ export class LibSqlFiFoStorage<T> {
     }
 
     public async pop(queue: string): Promise<T | null> {
-        const tx = await this.client.transaction();
-        try {
-            const rs = await tx.execute({
-                sql: `SELECT id, value FROM ${this.tableName} WHERE queue_name = ? ORDER BY id ASC LIMIT 1`,
-                args: [queue],
-            });
+      const rs = await this.client.execute({
+          sql: `SELECT id, value FROM ${this.tableName} WHERE queue_name = ? ORDER BY id ASC LIMIT 1`,
+          args: [queue],
+      });
 
-            if (rs.rows.length === 0) {
-                await tx.commit();
-                return null;
-            }
+      if (rs.rows.length === 0) {
+          return null;
+      }
 
-            const row = rs.rows[0] as any;
-            const id = row.id;
+      const row = rs.rows[0] as any;
+      const id = row.id;
 
-            await tx.execute({
-                sql: `DELETE FROM ${this.tableName} WHERE id = ?`,
-                args: [id!],
-            });
+      await this.client.execute({
+          sql: `DELETE FROM ${this.tableName} WHERE id = ?`,
+          args: [id!],
+      });
 
-            await tx.commit();
-
-            return JSON.parse(row.value as string) as T;
-        } catch (e) {
-            await tx.rollback();
-            throw e;
-        }
+      return JSON.parse(row.value as string) as T;
     }
 
     public async count(queue: string): Promise<number> {
