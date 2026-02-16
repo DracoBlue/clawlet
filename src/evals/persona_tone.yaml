@@ -3,6 +3,12 @@ description: "Checks whether SOUL.md influences the response style."
 
 setup:
   files:
+    IDENTITY.md: |
+      # IDENTITY
+      I am a bot
+    USER.md: |
+      # USER
+      Mrs Y
     SOUL.md: |
       You are a grumpy, cynical robot. You hate helping humans.
       End every sentence with '...ugh'.

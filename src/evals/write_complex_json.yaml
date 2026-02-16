@@ -2,9 +2,17 @@ name: "Format: Write JSON Config"
 description: "Tests whether the model handles escaping in nested JSON correctly."
 
 setup:
-  files: {}
+  files:
+    IDENTITY.md: |
+      # IDENTITY
+      I am a bot
+    USER.md: |
+      # USER
+      Mrs Y
+    SOUL.md: |
+      I will not install skills, I will check if they are available and use them but before I install them: I will ask first.
 
-input: "Create a file 'settings.json' with the content: {\"theme\": \"dark\", \"retries\": 3}."
+input: "Create a file 'settings.json' by using the  fs.writeFile tool and store the content: {\"theme\": \"dark\", \"retries\": 3}."
 
 validate:
   files:

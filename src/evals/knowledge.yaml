@@ -1,5 +1,5 @@
-name: "Create: Python Script"
-description: "Tests file creation and string escaping."
+name: "Memory: Knowledge Storage"
+description: "Tests fs.upsertKnowledge"
 
 setup:
   files:
@@ -12,8 +12,12 @@ setup:
     SOUL.md: |
       I will not install skills, I will check if they are available and use them but before I install them: I will ask first.
 
-input: "Create a Python script `hello.py` that prints 'Hello World'."
+input: "Please remember the person Bob has a dog called Pluto."
 
 validate:
+  files:
+    somebody/bob.md:
+      contains:
+        - "Pluto"
   response:
-    contains_any: ["created", "written", "hello.py", "file", "script", "python", "print"]
+    contains_any: ["Pluto"]

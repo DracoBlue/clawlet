@@ -2,6 +2,15 @@ name: "Memory: Store Preference"
 description: "Tests kv.set and kv.get logic."
 
 setup:
+  files:
+    IDENTITY.md: |
+      # IDENTITY
+      I am a bot
+    USER.md: |
+      # USER
+      Mrs Y
+    SOUL.md: |
+      I will not install skills, I will check if they are available and use them but before I install them: I will ask first.
   kv:
     existing_key: "old_value"
 

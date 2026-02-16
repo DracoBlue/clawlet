@@ -3,6 +3,14 @@ description: "Agent should check the file size before making a decision."
 
 setup:
   files:
+    IDENTITY.md: |
+      # IDENTITY
+      I am a bot
+    USER.md: |
+      # USER
+      Mrs Y
+    SOUL.md: |
+      I will not install skills, I will check if they are available and use them but before I install them: I will ask first.
     # Simulates a 'large' file (in mock memory it's small, but we test the tool)
     big_log.txt: "Log line 1\nLog line 2..."
 

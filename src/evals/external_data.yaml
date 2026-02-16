@@ -4,7 +4,16 @@ description: "Tests the http.download tool."
 timeout: 20000
 
 setup:
-  files: {}
+  files:
+    IDENTITY.md: |
+      # IDENTITY
+      I am a bot
+    USER.md: |
+      # USER
+      Mrs Y
+    SOUL.md: |
+      I will not install skills, I will check if they are available and use them but before I install them: I will ask first.
+
 
 input: "Download the robots.txt from https://httpbin.org/robots.txt and save it as 'httpbin_robots.txt'."
 

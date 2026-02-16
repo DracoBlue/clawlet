@@ -54,17 +54,21 @@ $ pnpm start
   - [x] handle session history
   - [x] read/write files and trash in workspace folder
   - [ ] git history for workspace folder
-  - [x] <AGENTS.md> support
+  - [x] `SYSTEM_INSTRUCTIONS`
   - [x] <SOUL.md> support
   - [x] users details at USER.md
   - [x] assistants details at IDENTITY.md
-  - [x] daily memory in memory/*.md
-  - [x] longterm memory in MEMORY.md
+  - [x] daily memory in `memory/[YYYY-MM-DD]/[HHmm]-[slug].md`
   - [ ] heartbeat crons via HEARTBEAT.md
   - [x] <SKILL.md> support (install + use and sandbox)
   - [x] permission handling for skills
   - [x] connection for api keys and credentials
   - [ ] add mcp configuration
+  - [x] long term memory in database with keyword search (store by type: somebody, something, preference, commitment,decisions,lessons as linked markdown files)
+  - [x] knowledge with vector search
+  - [x] knowledge with graph search
+  - [x] knowledge with conflict search
+  - [x] handle invalid `<tool_call>` with llm repair
 * local llm
   - [x] support mlx locally on macosx M3++
 * messaging

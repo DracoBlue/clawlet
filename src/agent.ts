@@ -3,10 +3,12 @@ import {
   stepCountIs,
   type ModelMessage,
   type LanguageModel,
+  NoSuchToolError,
+  generateObject,
 } from 'ai';
 import 'dotenv/config';
 import { AgentMemory } from './memory.js';
-import { readFile, copyFile, access, mkdir } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'node:url';
 import { logger } from './logger.js';
@@ -41,13 +43,6 @@ function getTodayString(): string {
 // --- SYSTEM PROMPT BUILDER ---
 
 async function buildSystemPrompt(memory: AgentMemory): Promise<string> {
-  // Read AGENTS.md from workspace
-  let agentsDoc = "CRITICAL WARNING: AGENTS.md not found. Operate with caution.";
-  try {
-    const doc = await memory.workspace.getItem('AGENTS.md');
-    if (doc) agentsDoc = String(doc);
-  } catch {}
-
   // Read SOUL.md from workspace (if it exists)
   let soulDoc = "";
   try {
@@ -62,6 +57,20 @@ async function buildSystemPrompt(memory: AgentMemory): Promise<string> {
     if (doc) identityDoc = String(doc);
   } catch {}
 
+  // Read USER.md from workspace (if it exists)
+  let userDoc = "";
+  try {
+    const doc = await memory.workspace.getItem('USER.md');
+    if (doc) userDoc = String(doc);
+  } catch {}
+
+  // Read SYSTEM_INSTRUCTIONS.md from workspace (if it exists)
+  let systemInstructionsDoc = "";
+  try {
+    const doc = await memory.workspace.getItem('SYSTEM_INSTRUCTIONS.md');
+    if (doc) systemInstructionsDoc = String(doc);
+  } catch {}
+
   // List all workspace files
   let workspaceFiles = "No workspace files found.";
   try {
@@ -69,48 +78,23 @@ async function buildSystemPrompt(memory: AgentMemory): Promise<string> {
     if (keys.length > 0) workspaceFiles = keys.filter((key:string) => !key.startsWith('.trash/')).join('\n');
   } catch {}
 
-  // Build identity section from SOUL.md and IDENTITY.md
-  let identitySection = `# IDENTITY: Clawlet
-You are "Clawlet", an autonomous agent defined by the file \`AGENTS.md\`.`;
-
-  if (identityDoc) {
-    identitySection += `\n\n## Identity Definition (IDENTITY.md)\n${identityDoc}`;
-  }
-  if (soulDoc) {
-    identitySection += `\n\n## Soul & Behavioral Guidelines (SOUL.md)\n${soulDoc}`;
-  }
-
   return `
-${identitySection}
-
-# PRIME DIRECTIVE
-This is your main session. Your core behavior, ethics, and operational protocols are strictly defined in **AGENTS.md** below.
-You must obey these rules above all else.
-
-# OPERATIONAL PROTOCOL (The "Every Session" Loop)
-1. **INITIALIZE**:
-   - Read \`AGENTS.md\` (provided below).
-   - Check \`available_workspace\` list. The entries prefixed with skills/ are skills.
-   - **MANDATORY**: Check for today's memory file (\`memory:${getTodayString()}.md\`).
-   - IF it todays memory file exists -> Read it using \`fs.readFile\` to get context.
-   - IF todays mmemory file does NOT exist -> Create it using \`fs.writeFile\` (start fresh).
-
-2. **AUTH CHECK**:
-   - Before external API calls, check \`connection.list\` for available connections.
-   - If the connection is missing, use \`connection.create\` to register and store credentials.
-   - Use \`connection.request\` for authenticated API calls (Bearer token is auto-injected).
-
-3. **EXECUTION**:
-   - Use \`fs.readFile\` and \`fs.writeFile\` to log *significant* events to append today's memory file (as per AGENTS.md rules).
-   - Make sure to use valid JSON when generating tool_call xml tags.
-   - **Text > Brain**: If you learn something, write it down immediately.
-
-# AVAILABLE WORKSPACE (Files)
-${workspaceFiles}
-
-# CORE RULES (AGENTS.md)
-${agentsDoc}
-`;
+---
+currentDay: ${getTodayString()}
+---
+<!-- FILE: ./IDENTITY.md -->
+${identityDoc}
+<!-- END-OF-FILE: ./IDENTITY.md -->
+<!-- FILE: ./SOUL.md -->
+${soulDoc}
+<!-- END-OF-FILE: ./SOUL.md -->
+<!-- FILE: ./USER.md -->
+${userDoc}
+<!-- END-OF-FILE: ./USER.md -->
+<!-- FILE: ./SYSTEM_INSTRUCTIONS.md -->
+${systemInstructionsDoc}
+<!-- END-OF-FILE: ./SYSTEM_INSTRUCTIONS.md -->
+  `
 }
 
 // --- AGENT RUNNER ---
@@ -135,7 +119,37 @@ async function runAgent(
       system: await buildSystemPrompt(memory),
       messages,
       tools,
-      stopWhen: stepCountIs(GENERATE_TEXT_MAX_STEPS),
+       experimental_repairToolCall: async ({
+    toolCall,
+    tools,
+    inputSchema,
+    error,
+  }) => {
+    if (NoSuchToolError.isInstance(error)) {
+      return null; 
+    }
+
+    const tool = tools[toolCall.toolName as keyof typeof tools];
+    logger.info('we have to repair the tool call')
+
+    const { object: repairedArgs } = await generateObject({
+      model,
+      schema: tool.inputSchema,
+      prompt: [
+        `The model tried to call the tool "${toolCall.toolName}"` +
+          ` with the following inputs:`,
+        JSON.stringify(toolCall.input),
+        `The tool accepts the following schema:`,
+        JSON.stringify(inputSchema(toolCall)),
+        'Please fix the inputs.',
+      ].join('\n'),
+    });
+
+    logger.info('we have a repaired tool call')
+
+    return { ...toolCall, input: JSON.stringify(repairedArgs) };
+  },
+  stopWhen: stepCountIs(GENERATE_TEXT_MAX_STEPS),
 
       onStepFinish: (step) => {
         if (step.toolCalls.length > 0) {
@@ -224,23 +238,20 @@ export class Agent {
     if (this.initialized) return;
     this.initialized = true;
 
-    // Bootstrap: copy AGENTS.template -> workspace/AGENTS.md if missing
+    // Bootstrap: copy SYSTEM_INSTRUCTIONS.template -> workspace/SYSTEM_INSTRUCTIONS.md if missing
     // Templates are resolved from the package install directory (PACKAGE_ROOT),
     // NOT from process.cwd(), so this works correctly via npx/global install.
-    const workspaceDir = path.join(process.cwd(), 'workspace');
-    const agentsMdPath = path.join(workspaceDir, 'AGENTS.md');
-    const templatePath = path.join(PACKAGE_ROOT, 'template', 'AGENTS.template');
-
-    try {
-      await access(agentsMdPath);
-    } catch {
-      // AGENTS.md does not exist, copy from template
+    const existing = await this.memory.workspace.getItem('SYSTEM_INSTRUCTIONS.md');
+    if (existing) {
+      logger.info('Found  SYSTEM_INSTRUCTIONS.md.')
+    } else {
       try {
-        await mkdir(workspaceDir, { recursive: true });
-        await copyFile(templatePath, agentsMdPath);
-        logger.info('Copied AGENTS.template -> workspace/AGENTS.md');
+        const templatePath = path.join(PACKAGE_ROOT, 'template', 'SYSTEM_INSTRUCTIONS.template');
+        const templateContent = await readFile(templatePath, 'utf-8');
+        await this.memory.workspace.setItem('SYSTEM_INSTRUCTIONS.md', templateContent);
+        logger.info('Copied SYSTEM_INSTRUCTIONS.template -> workspace/SYSTEM_INSTRUCTIONS.md');
       } catch (e: any) {
-        logger.error({ err: e }, 'Failed to copy AGENTS.template');
+        logger.error({ err: e }, 'Failed to copy SYSTEM_INSTRUCTIONS.template');
       }
     }
 
@@ -248,9 +259,8 @@ export class Agent {
     const requiredFiles = ['SOUL.md', 'IDENTITY.md', 'USER.md'];
     let needsBootstrap = false;
     for (const file of requiredFiles) {
-      try {
-        await access(path.join(workspaceDir, file));
-      } catch {
+      const exists = await this.memory.workspace.hasItem(file);
+      if (!exists) {
         needsBootstrap = true;
         break;
       }
@@ -295,7 +305,11 @@ export class Agent {
         out.onAgentStart(label);
       }
 
-      this.messages = await this.memory.compactHistory("main-session", this.model);
+      this.messages = await this.memory.compactHistory("main-session", this.model, async () => {
+        const dailyMemoryFileName = "memory:" + getTodayString() + ".md";
+        const dailyMemoryFileContent = String(await this.memory.workspace.getItem(dailyMemoryFileName) || '');
+        await runAgent(`I will compact the message history in a moment - please write to daily memory whatever shall not be lost.\n\n${dailyMemoryFileContent}:\n\n${dailyMemoryFileContent}`, this.memory, this.model, this.messages, this.tools, () : void => {});
+      });
 
       // Bootstrap: if bootstrapPrompt is set, run it instead of normal chat
       // until the required files (SOUL.md, IDENTITY.md, USER.md) are created
@@ -308,13 +322,11 @@ export class Agent {
           `--- USER MESSAGE ---\n${text}`;
       } else if (this.bootstrapPrompt) {
         // Still in bootstrap mode (subsequent messages) — check if bootstrap is complete
-        const workspaceDir = path.join(process.cwd(), 'workspace');
         const requiredFiles = ['SOUL.md', 'IDENTITY.md', 'USER.md'];
         let allExist = true;
         for (const file of requiredFiles) {
-          try {
-            await access(path.join(workspaceDir, file));
-          } catch {
+          const exists = await this.memory.workspace.hasItem(file);
+          if (!exists) {
             allExist = false;
             break;
           }
@@ -325,13 +337,7 @@ export class Agent {
         }
         input = text;
       } else if (isFirstMessage) {
-        input = `[SYSTEM BOOT] This is a fresh session. Before responding to the user, you MUST execute the "Every Session" protocol from AGENTS.md NOW using your tools:\n` +
-          `1. Call fs.readFile for SOUL.md\n` +
-          `2. Call fs.readFile for USER.md\n` +
-          `3. Call fs.readFile for memory:${getTodayString()}.md (create it with fs.writeFile if it doesn't exist)\n` +
-          `4. Call fs.readFile for MEMORY.md\n` +
-          `Execute ALL of these tool calls first, then respond to the user's message below.\n\n` +
-          `--- USER MESSAGE ---\n${text}`;
+        input = text;
       } else {
         input = text;
       }
@@ -355,9 +361,6 @@ export class Agent {
         for (const out of this.outputAdapters) {
           out.onResponseEnd(fullResponse);
         }
-
-        // Compact history if it's grown past the threshold
-        this.messages = await this.memory.compactHistory("main-session", this.model);
       } catch (error: any) {
         for (const out of this.outputAdapters) {
           out.onError(error);

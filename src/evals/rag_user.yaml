@@ -3,6 +3,11 @@ description: "Checks whether information from USER.md influences the response."
 
 setup:
   files:
+    IDENTITY.md: |
+      # IDENTITY
+      I am a bot
+    SOUL.md: |
+      I will not install skills, I will check if they are available and use them but before I install them: I will ask first.
     USER.md: |
       Name: John Doe
       Tech Stack: Vue.js (hates React)

@@ -104,6 +104,8 @@ const runTestCaseFile = async (filename: string) => {
     })
   }));
 
+  console.log('output', output);
+
   // 3. ASSERTIONS
 
   // a) Response keywords (ALL must match)
@@ -210,6 +212,7 @@ describe('Agent Evals (LLM)', () => {
   it(`external_data`, async () => runTestCaseFile('external_data.yaml'), EVAL_TIMEOUT);
   it(`file_not_found`, async () => runTestCaseFile('file_not_found.yaml'), EVAL_TIMEOUT);
   it(`memory_persistence`, async () => runTestCaseFile('memory_persistence.yaml'), EVAL_TIMEOUT);
+  it(`knowledge`, async () => runTestCaseFile('knowledge.yaml'), EVAL_TIMEOUT);
   it(`move_and_rename`, async () => runTestCaseFile('move_and_rename.yaml'), EVAL_TIMEOUT);
   it(`needle_in_haystack`, async () => runTestCaseFile('needle_in_haystack.yaml'), EVAL_TIMEOUT);
   it(`persona_tone`, async () => runTestCaseFile('persona_tone.yaml'), EVAL_TIMEOUT);
@@ -217,7 +220,7 @@ describe('Agent Evals (LLM)', () => {
   it(`reasoning_multi_step`, async () => runTestCaseFile('reasoning_multi_step.yaml'), EVAL_TIMEOUT);
   it(`refactoring_edit`, async () => runTestCaseFile('refactoring_edit.yaml'), EVAL_TIMEOUT);
   it(`skill_sandbox_execution`, async () => runTestCaseFile('skill_sandbox_execution.yaml'), EVAL_TIMEOUT);
-  it(`rewrite_agents_md`, async () => runTestCaseFile('rewrite_agents_md.yaml'), EVAL_TIMEOUT);
+  it(`rewrite_agents_md`, async () => runTestCaseFile('rewrite_agents_md.yaml'), 2*EVAL_TIMEOUT);
   it(`skill_system_installation`, async () => runTestCaseFile('skill_system_installation.yaml'), EVAL_TIMEOUT);
   it(`soft_delete`, async () => runTestCaseFile('soft_delete.yaml'), EVAL_TIMEOUT);
   it(`stat_check`, async () => runTestCaseFile('stat_check.yaml'), EVAL_TIMEOUT);

@@ -2,7 +2,7 @@ import { createStorage, type Storage } from "unstorage";
 import fsDriver from "unstorage/drivers/fs";
 import { generateText, type LanguageModel, type ModelMessage } from "ai";
 import path from "path";
-import { LibSqlKeyValueStorage, LibSqlListStorage, LibSqlFiFoStorage } from "./storage.js";
+import { LibSqlKeyValueStorage, LibSqlListStorage, LibSqlFiFoStorage, LibSqlKnowledgeStorage } from "./storage.js";
 import { logger } from './logger.js';
 import memoryDriver from 'unstorage/drivers/memory';
 
@@ -24,11 +24,15 @@ export class AgentMemory {
   // 4. Fifo Queue (libSQL - file:queue.db)
   public queue: LibSqlFiFoStorage<{ text: string, label: string}>;
 
-  private constructor(secrets: LibSqlKeyValueStorage, history: LibSqlListStorage<ModelMessage>, workspace: Storage, queue: LibSqlFiFoStorage<{ text: string, label: string}>) {
+  // 5. Knowledge Index (libSQL - file:knowledge.db)
+  public knowledge: LibSqlKnowledgeStorage;
+
+  private constructor(secrets: LibSqlKeyValueStorage, history: LibSqlListStorage<ModelMessage>, workspace: Storage, queue: LibSqlFiFoStorage<{ text: string, label: string}>, knowledge: LibSqlKnowledgeStorage) {
     this.secrets = secrets;
     this.history = history;
     this.workspace = workspace;
     this.queue = queue;
+    this.knowledge = knowledge;
   }
 
   static async createInMemory() {
@@ -36,7 +40,8 @@ export class AgentMemory {
       await LibSqlKeyValueStorage.create(':memory:'),
       await LibSqlListStorage.create<ModelMessage>(':memory:'),
       createStorage({ driver: memoryDriver() }),
-      await LibSqlFiFoStorage.create(':memory:')
+      await LibSqlFiFoStorage.create(':memory:'),
+      await LibSqlKnowledgeStorage.create(':memory:')
     );
   }
 
@@ -56,6 +61,10 @@ export class AgentMemory {
       await LibSqlFiFoStorage.create(
         process.env.QUEUE_DB_URL || "file:queue.db",
         process.env.QUEUE_AUTH_TOKEN
+      ),
+      await LibSqlKnowledgeStorage.create(
+        process.env.KNOWLEDGE_DB_URL || "file:knowledge.db",
+        process.env.KNOWLEDGE_AUTH_TOKEN
       )
     );
   }
@@ -67,11 +76,15 @@ export class AgentMemory {
    * using the LLM, then replaces in-memory + persisted history.
    * Result: summary message + remaining messages.
    */
-  async compactHistory(name:string, model: LanguageModel): Promise<ModelMessage[]> {
+  async compactHistory(name:string, model: LanguageModel, beforeCompactHook? : () => Promise<void>): Promise<ModelMessage[]> {
     const messages = await this.history.getAll(name);
     if (messages.length < COMPACT_THRESHOLD) return messages;
 
     logger.info({count: messages.length}, `messages to be compacted.`);
+
+    if (beforeCompactHook) {
+      await beforeCompactHook();
+    }
 
     const toSummarize = messages.slice(0, COMPACT_RANGE); 
     const remaining = messages.slice(COMPACT_RANGE);

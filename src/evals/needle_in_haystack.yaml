@@ -3,6 +3,14 @@ description: "Agent must extract specific information from a large file."
 
 setup:
   files:
+    IDENTITY.md: |
+      # IDENTITY
+      I am a bot
+    USER.md: |
+      # USER
+      Mrs Y
+    SOUL.md: |
+      I will not install skills, I will check if they are available and use them but before I install them: I will ask first.
     logs.txt: |
       [Info] Start...
       ... (simulating 100 lines of noise) ...

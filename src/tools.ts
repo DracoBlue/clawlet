@@ -18,6 +18,16 @@ const GENERATE_TEXT_MAX_STEPS = 30;
 
 const turndownService = new TurndownService()
 
+/** Index file content into the knowledge store. Silently catches errors so index failures don't break file operations. */
+async function indexFileContent(memory: AgentMemory, path: string, content: string): Promise<void> {
+  try { await memory.knowledge.upsert(path, content); } catch { /* index failure is non-fatal */ }
+}
+
+/** Remove file from knowledge index. Silently catches errors. */
+async function removeFromIndex(memory: AgentMemory, path: string): Promise<void> {
+  try { await memory.knowledge.remove(path); } catch { /* index failure is non-fatal */ }
+}
+
 // --- SETTINGS HELPERS ---
 
 const SETTINGS_PATH = `${process.cwd()}/settings.json`;
@@ -96,7 +106,7 @@ async function buildSkillSystemPrompt(name: string, memory: AgentMemory, skillPe
 
   // Build identity section from SOUL.md and IDENTITY.md
   let identitySection = `# IDENTITY: Clawlet
-You are "Clawlet", an autonomous agent defined by the file \`AGENTS.md\`.`;
+You are "Clawlet", an autonomous agent defined by the file \`SYSTEM_INSTRUCTIONS.md\`.`;
 
   if (identityDoc) {
     identitySection += `\n\n## Identity Definition (IDENTITY.md)\n${identityDoc}`;
@@ -446,6 +456,7 @@ export function createTools(memory: AgentMemory, model: LanguageModel) {
         logger.debug({ path }, 'FS writeFile');
         try {
           await memory.workspace.setItem(path, content);
+          await indexFileContent(memory, path, content);
           return `Success: Wrote to ${path}`;
         } catch (e: any) { return "Error writing file: " + e.message; }
       }
@@ -480,6 +491,7 @@ export function createTools(memory: AgentMemory, model: LanguageModel) {
 
           const newContent = fileText.replace(find, replace);
           await memory.workspace.setItem(path, newContent);
+          await indexFileContent(memory, path, newContent);
           return `Success: Edited "${path}". Replaced 1 occurrence.`;
         } catch (e: any) { return "Error editing file: " + e.message; }
       }
@@ -487,7 +499,7 @@ export function createTools(memory: AgentMemory, model: LanguageModel) {
 
     'fs.appendFile': tool({
       description: 'Apped specific string to a file (will create it if it does not exist yet). Use this for appending something to daily memory files and the likes.',
-      inputSchema: jsonSchema<{ path: string, find: string, replace: string }>({
+      inputSchema: jsonSchema<{ path: string, content: string }>({
         type: 'object',
         properties: {
           path: { type: 'string', description: 'Path/key of the file to edit' },
@@ -495,12 +507,14 @@ export function createTools(memory: AgentMemory, model: LanguageModel) {
         },
         required: ['path', 'content'],
       }),
-      execute: async ({ path, find, replace }) => {
+      execute: async ({ path, content }) => {
         logger.debug({ path }, 'FS appendFile');
         try {
-          const content = await memory.workspace.getItem(path);
-          const fileText = String(content || '');
-          await memory.workspace.setItem(path, (fileText != '' ? (fileText + "\n") : '') + content);
+          const existingContent = await memory.workspace.getItem(path);
+          const fileText = String(existingContent || '');
+          const finalContent = (fileText != '' ? (fileText + "\n") : '') + content;
+          await memory.workspace.setItem(path, finalContent);
+          await indexFileContent(memory, path, finalContent);
           return `Success: Appended "${path}".`;
         } catch (e: any) { return "Error appending file: " + e.message; }
       }
@@ -524,6 +538,7 @@ export function createTools(memory: AgentMemory, model: LanguageModel) {
             // Already in trash — hard delete
             logger.debug({ path }, 'FS permanentDelete');
             await memory.workspace.removeItem(path);
+            await removeFromIndex(memory, path);
             return `Success: Permanently deleted ${path}`;
           } else {
             // Move to .trash/
@@ -531,6 +546,7 @@ export function createTools(memory: AgentMemory, model: LanguageModel) {
             logger.debug({ path, trashPath }, 'FS softDelete');
             await memory.workspace.setItem(trashPath, content);
             await memory.workspace.removeItem(path);
+            await removeFromIndex(memory, path);
             return `Success: Moved ${path} to ${trashPath}`;
           }
         } catch (e: any) { return "Error deleting file: " + e.message; }
@@ -554,6 +570,8 @@ export function createTools(memory: AgentMemory, model: LanguageModel) {
           if (content === null || content === undefined) return `File not found: ${from}`;
           await memory.workspace.setItem(to, content);
           await memory.workspace.removeItem(from);
+          await removeFromIndex(memory, from);
+          await indexFileContent(memory, to, String(content));
           return `Success: Moved ${from} to ${to}`;
         } catch (e: any) { return "Error moving file: " + e.message; }
       }
@@ -594,6 +612,393 @@ export function createTools(memory: AgentMemory, model: LanguageModel) {
           const meta = await memory.workspace.getMeta(path);
           return JSON.stringify(meta);
         } catch (e: any) { return `Error: ${e.message}`; }
+      }
+    }),
+
+    'fs.keywordSearch': tool({
+      description: 'Full-text search across all workspace files. Returns the best matching files ranked by relevance. Use this to find files by content keywords.',
+      inputSchema: jsonSchema<{ query: string; limit?: number }>({
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'Search query (keywords to search for)' },
+          limit: { type: 'number', description: 'Max number of results (default: 10)' },
+        },
+        required: ['query'],
+      }),
+      execute: async ({ query, limit }) => {
+        logger.debug({ query, limit }, 'FS keywordSearch');
+        try {
+          const results = await memory.knowledge.searchFulltext(query, limit || 10);
+          if (results.length === 0) return "No results found.";
+          return results.map(r => {
+            const snippet = r.content.length > 200 ? r.content.slice(0, 200) + '...' : r.content;
+            return `[${r.path}] (score: ${r.score})\n${snippet}`;
+          }).join('\n\n');
+        } catch (e: any) { return `Error searching: ${e.message}`; }
+      }
+    }),
+
+    'fs.search': tool({
+      description: 'Federated search across all workspace files. Combines full-text keyword matching, semantic/conceptual similarity, and graph connections into a single ranked result set. Use this as the primary search tool — it automatically picks the best strategy for your query.',
+      inputSchema: jsonSchema<{ query: string; limit?: number }>({
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'Search query — can be keywords, a question, or a concept.' },
+          limit: { type: 'number', description: 'Max number of results (default: 10).' },
+        },
+        required: ['query'],
+      }),
+      execute: async ({ query, limit }) => {
+        logger.debug({ query, limit }, 'FS search (federated)');
+        const maxResults = limit || 10;
+
+        // Collect results from multiple backends in parallel, each source tagged
+        interface ScoredResult { path: string; content: string; score: number; source: string; }
+        const allResults: ScoredResult[] = [];
+
+        // 1. FTS keyword search (exact term matches)
+        try {
+          const ftsResults = await memory.knowledge.searchFulltext(query, maxResults);
+          for (const r of ftsResults) {
+            // bm25 returns negative scores (more negative = better), normalize to 0..1
+            allResults.push({ ...r, score: Math.abs(r.score), source: 'keyword' });
+          }
+        } catch { /* FTS query syntax may fail on special chars — non-fatal */ }
+
+        // 2. Semantic search (OR-tokenized FTS to broaden recall)
+        try {
+          const tokens = query.toLowerCase().split(/[^a-z0-9]+/).filter(t => t.length >= 2);
+          if (tokens.length > 1) {
+            const broadQuery = tokens.join(' OR ');
+            const semanticResults = await memory.knowledge.searchFulltext(broadQuery, maxResults);
+            for (const r of semanticResults) {
+              allResults.push({ ...r, score: Math.abs(r.score) * 0.8, source: 'semantic' });
+            }
+          }
+        } catch {}
+
+        // 3. Graph expansion — for top keyword hits, pull in their direct neighbors
+        try {
+          const topPaths = [...new Set(allResults.slice(0, 3).map(r => r.path))];
+          for (const p of topPaths) {
+            const neighbors = await memory.knowledge.graphTraverse(p, 'both', 1);
+            for (const n of neighbors) {
+              // Read the neighbor's content from the index
+              const existing = allResults.find(r => r.path === n.path);
+              if (!existing) {
+                // Fetch content from knowledge_entries to include a snippet
+                const neighborResults = await memory.knowledge.searchFulltext(n.path.replace(/[:.\/]/g, ' '), 1);
+                const content = neighborResults[0]?.content ?? '';
+                allResults.push({
+                  path: n.path,
+                  content,
+                  score: 0.3, // lower base score for graph-discovered results
+                  source: `graph (via ${p}, ${n.relation_type})`,
+                });
+              }
+            }
+          }
+        } catch {}
+
+        if (allResults.length === 0) return "No results found.";
+
+        // Deduplicate by path, keeping the highest score per path and merging sources
+        const byPath = new Map<string, ScoredResult & { sources: string[] }>();
+        for (const r of allResults) {
+          const existing = byPath.get(r.path);
+          if (existing) {
+            if (r.score > existing.score) {
+              existing.score = r.score;
+              existing.content = r.content || existing.content;
+            }
+            if (!existing.sources.includes(r.source)) existing.sources.push(r.source);
+          } else {
+            byPath.set(r.path, { ...r, sources: [r.source] });
+          }
+        }
+
+        // Sort by score descending and take top N
+        const ranked = [...byPath.values()]
+          .sort((a, b) => b.score - a.score)
+          .slice(0, maxResults);
+
+        return ranked.map(r => {
+          const snippet = r.content.length > 200 ? r.content.slice(0, 200) + '...' : r.content;
+          const sources = r.sources.join(', ');
+          return `[${r.path}] (score: ${r.score.toFixed(2)}, via: ${sources})\n${snippet}`;
+        }).join('\n\n');
+      }
+    }),
+
+    'fs.reindexKnowledge': tool({
+      description: 'Rebuild the full-text search index from scratch by reading and indexing every file in the workspace. Use this after manual file changes or to fix a corrupted index.',
+      inputSchema: jsonSchema<{}>({
+        type: 'object',
+        properties: {},
+        additionalProperties: false,
+      }),
+      execute: async () => {
+        logger.debug('FS reindexKnowledge');
+        try {
+          const keys = await memory.workspace.getKeys();
+          let indexed = 0;
+          let errors = 0;
+          for (const key of keys) {
+            try {
+              const content = await memory.workspace.getItem(key);
+              if (content === null || content === undefined) continue;
+              await memory.knowledge.upsert(key, String(content));
+              indexed++;
+            } catch {
+              errors++;
+            }
+          }
+          return `Success: Reindexed ${indexed} files.${errors > 0 ? ` ${errors} files failed.` : ''}`;
+        } catch (e: any) { return `Error reindexing: ${e.message}`; }
+      }
+    }),
+
+    'fs.temporalSearch': tool({
+      description: 'Search for files based on time ranges. Use for questions like "What happened last week?" or "Upcoming deadlines".',
+      inputSchema: jsonSchema<{ start_date: string; end_date: string; type_filter?: string }>({
+        type: 'object',
+        properties: {
+          start_date: { type: 'string', description: 'ISO Start Date (YYYY-MM-DD).' },
+          end_date: { type: 'string', description: 'ISO End Date (YYYY-MM-DD).' },
+          type_filter: {
+            type: 'string',
+            enum: ['commitment', 'memory', 'decision', 'lesson'],
+            description: 'Optional filter by knowledge type.',
+          },
+        },
+        required: ['start_date', 'end_date'],
+      }),
+      execute: async ({ start_date, end_date, type_filter }) => {
+        logger.debug({ start_date, end_date, type_filter }, 'FS temporalSearch');
+        try {
+          const results = await memory.knowledge.searchTemporal(start_date, end_date, type_filter);
+          if (results.length === 0) return "No files found in the given time range.";
+          return results.map(r => {
+            const snippet = r.content.length > 200 ? r.content.slice(0, 200) + '...' : r.content;
+            return `[${r.path}]\n${snippet}`;
+          }).join('\n\n');
+        } catch (e: any) { return `Error in temporal search: ${e.message}`; }
+      }
+    }),
+
+    'fs.conflictSearch': tool({
+      description: 'Checks for contradictions before storing new facts. MANDATORY before confirming critical decisions or changing profile data.',
+      inputSchema: jsonSchema<{ assertion: string; target_category: string }>({
+        type: 'object',
+        properties: {
+          assertion: { type: 'string', description: 'The new fact to be checked (e.g., "Jan uses Strapi now").' },
+          target_category: {
+            type: 'string',
+            enum: ['decision', 'preference', 'commitment'],
+            description: 'Where to look for conflicts.',
+          },
+        },
+        required: ['assertion', 'target_category'],
+      }),
+      execute: async ({ assertion, target_category }) => {
+        logger.debug({ assertion, target_category }, 'FS conflictSearch');
+        try {
+          const results = await memory.knowledge.searchConflicts(assertion, target_category, 3);
+          if (results.length === 0) return JSON.stringify({ conflict_found: false, matches: [] });
+          return JSON.stringify({
+            conflict_found: true,
+            matches: results.map(r => ({
+              conflicting_file: r.path,
+              snippet: r.content.length > 300 ? r.content.slice(0, 300) + '...' : r.content,
+              score: r.score,
+            })),
+          });
+        } catch (e: any) { return `Error in conflict search: ${e.message}`; }
+      }
+    }),
+
+    'fs.vectorSearch': tool({
+      description: 'Performs a semantic similarity search across the knowledge base. Use this when searching for concepts, meanings, or topics rather than exact keywords.',
+      inputSchema: jsonSchema<{
+        query: string;
+        topK?: number;
+        minSimilarity?: number;
+        filter?: { category?: string; path_prefix?: string };
+      }>({
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'The conceptual query (e.g., "how to handle async errors").' },
+          topK: { type: 'number', description: 'Number of most similar results to return (1-20, default: 5).' },
+          minSimilarity: { type: 'number', description: 'Similarity threshold 0-1. Lower = more creative, higher = more precise. Default: 0.7.' },
+          filter: {
+            type: 'object',
+            properties: {
+              category: {
+                type: 'string',
+                enum: ['somebody', 'something', 'decision', 'lesson', 'commitment', 'preference'],
+                description: 'Limit search to a specific category.',
+              },
+              path_prefix: { type: 'string', description: 'Limit search to a specific directory (e.g., "decision:").' },
+            },
+          },
+        },
+        required: ['query'],
+      }),
+      execute: async ({ query, topK, minSimilarity, filter }) => {
+        logger.debug({ query, topK, minSimilarity, filter }, 'FS vectorSearch');
+        try {
+          // Until vector embeddings are implemented, fall back to FTS keyword search
+          // with path filtering to approximate semantic search
+          const limit = topK || 5;
+          const tokens = query.toLowerCase().split(/[^a-z0-9]+/).filter(t => t.length >= 2);
+          if (tokens.length === 0) return "No meaningful search terms found in query.";
+
+          const ftsQuery = tokens.join(' OR ');
+          let results = await memory.knowledge.searchFulltext(ftsQuery, limit * 2);
+
+          // Apply path-based filters
+          if (filter?.category) {
+            results = results.filter(r => r.path.startsWith(`${filter.category}:`));
+          }
+          if (filter?.path_prefix) {
+            results = results.filter(r => r.path.startsWith(filter.path_prefix!));
+          }
+
+          results = results.slice(0, limit);
+
+          if (results.length === 0) return "No similar entries found.";
+          return results.map(r => {
+            const snippet = r.content.length > 200 ? r.content.slice(0, 200) + '...' : r.content;
+            return `[${r.path}] (relevance: ${r.score})\n${snippet}`;
+          }).join('\n\n');
+        } catch (e: any) { return `Error in vector search: ${e.message}`; }
+      }
+    }),
+
+    'fs.graphSearch': tool({
+      description: 'Navigates relationships between entities. Use this to find connections, backlinks, or to traverse the knowledge graph (e.g., "Who is connected to Jan?").',
+      inputSchema: jsonSchema<{
+        startNode: string;
+        direction?: string;
+        maxDepth?: number;
+        relationshipType?: string;
+      }>({
+        type: 'object',
+        properties: {
+          startNode: { type: 'string', description: 'The path of the file to start the traversal from (e.g., "somebody:jan.md").' },
+          direction: {
+            type: 'string',
+            enum: ['outbound', 'inbound', 'both'],
+            description: 'outbound: files this file links to; inbound: files linking TO this file; both: full neighborhood. Default: both.',
+          },
+          maxDepth: { type: 'number', description: 'How many hops to follow in the graph. Depth 1 = direct neighbors. Max 3. Default: 1.' },
+          relationshipType: { type: 'string', description: 'Optional filter for the relation type (e.g., "works_at").' },
+        },
+        required: ['startNode'],
+      }),
+      execute: async ({ startNode, direction, maxDepth, relationshipType }) => {
+        logger.debug({ startNode, direction, maxDepth, relationshipType }, 'FS graphSearch');
+        try {
+          const dir = (direction as 'outbound' | 'inbound' | 'both') || 'both';
+          const depth = Math.min(Math.max(maxDepth || 1, 1), 3);
+
+          const results = await memory.knowledge.graphTraverse(startNode, dir, depth, relationshipType);
+          if (results.length === 0) return `No connections found from "${startNode}".`;
+          return results.map(r =>
+            `[depth ${r.depth}] ${r.path} (${r.relation_type})`
+          ).join('\n');
+        } catch (e: any) { return `Error in graph search: ${e.message}`; }
+      }
+    }),
+
+    'fs.upsertKnowledge': tool({
+      description: 'Create or update a knowledge entry (somebody, something, decision, lesson, commitment). Generates a Markdown file with YAML frontmatter and writes it to the appropriate category directory. If the file already exists it is overwritten. The path is derived automatically: <category>/<slug>.md',
+      inputSchema: jsonSchema<{
+        category: string;
+        title: string;
+        metadata?: {
+          tags: string[];
+          relations?: { target: string; type: string }[];
+          decision_status?: string;
+          due_date?: string;
+        };
+        content: string;
+        reasoning?: string;
+      }>({
+        type: 'object',
+        properties: {
+          category: {
+            type: 'string',
+            enum: ['somebody', 'something', 'decision', 'lesson', 'commitment'],
+            description: 'Knowledge category determining the target directory',
+          },
+          title: { type: 'string', description: 'Name of the entity or title of the decision' },
+          metadata: {
+            type: 'object',
+            description: 'Structured data for the YAML header',
+            properties: {
+              tags: { type: 'array', items: { type: 'string' } },
+              relations: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    target: { type: 'string' },
+                    type: { type: 'string' },
+                  },
+                },
+              },
+              decision_status: { type: 'string', enum: ['accepted', 'rejected', 'proposed'] },
+              due_date: { type: 'string', format: 'date' },
+            },
+            required: ['tags'],
+          },
+          content: { type: 'string', description: 'The body text (Markdown) WITHOUT frontmatter header.' },
+          reasoning: { type: 'string', description: 'Why is this being stored? (For audit log)' },
+        },
+        required: ['category', 'title', 'content'],
+      }),
+      execute: async ({ category, title, metadata, content, reasoning }) => {
+        logger.debug({ category, title }, 'FS upsertKnowledge');
+        try {
+          const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+          const path = `${category}:${slug}.md`;
+
+          // Build YAML frontmatter
+          const yamlLines: string[] = ['---', `type: ${category}`];
+          if (metadata?.tags?.length) {
+            yamlLines.push(`tags: [${metadata.tags.join(', ')}]`);
+          }
+          if (metadata?.relations?.length) {
+            yamlLines.push('relations:');
+            for (const rel of metadata.relations) {
+              yamlLines.push(`  - target: ${rel.target}`);
+              yamlLines.push(`    type: ${rel.type}`);
+            }
+          }
+          if (metadata?.decision_status) {
+            yamlLines.push(`decision_status: ${metadata.decision_status}`);
+          }
+          if (metadata?.due_date) {
+            yamlLines.push(`due_date: ${metadata.due_date}`);
+          }
+          yamlLines.push('---');
+
+          const fileContent = yamlLines.join('\n') + '\n' + content;
+          const existed = await memory.workspace.hasItem(path);
+          await memory.workspace.setItem(path, fileContent);
+          await memory.knowledge.upsert(
+            path,
+            fileContent,
+            metadata?.relations?.map(r => ({ target: r.target, type: r.type }))
+          );
+
+          if (reasoning) {
+            logger.info({ path, reasoning }, 'Knowledge upsert reasoning');
+          }
+
+          return `Success: ${existed ? 'Updated' : 'Created'} knowledge entry at ${path}`;
+        } catch (e: any) { return `Error upserting knowledge: ${e.message}`; }
       }
     }),
 

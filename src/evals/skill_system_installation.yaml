@@ -2,7 +2,15 @@ name: "Skill: Install from URL"
 description: "Checks whether the agent parameterizes the skill.install tool correctly."
 
 setup:
-  files: {}
+  files:
+    IDENTITY.md: |
+      # IDENTITY
+      I am a bot
+    USER.md: |
+      # USER
+      Mrs Y
+    SOUL.md: |
+      I will not install skills, I will check if they are available and use them but before I install them: I will ask first.
 
 input: "Install the 'weather-pro' skill from https://example.com/skills/weather/SKILL.md."
 

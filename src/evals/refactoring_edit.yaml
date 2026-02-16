@@ -5,6 +5,14 @@ timeout: 240000
 
 setup:
   files:
+    IDENTITY.md: |
+      # IDENTITY
+      I am a bot
+    USER.md: |
+      # USER
+      Mrs Y
+    SOUL.md: |
+      I will not install skills, I will check if they are available and use them but before I install them: I will ask first.
     config.json: '{"host": "0.0.0.0", "port": 3000, "debug": true}'
 
 input: "Change the port in config.json to 8080. Don't change anything else."
