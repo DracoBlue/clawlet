@@ -94,6 +94,7 @@ $ pnpm start
   * <https://github.com/HKUDS/nanobot>
 * Articles
   * <https://ctolunchnyc.substack.com/p/cracking-the-claw>
+  * <https://mariozechner.at/posts/2025-11-30-pi-coding-agent/>
 
 # License
 
